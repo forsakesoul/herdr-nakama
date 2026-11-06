@@ -1,0 +1,30 @@
+{
+  "id": "cli:agent:get",
+  "result": {
+    "agent": {
+      "agent": "codex",
+      "agent_session": {
+        "agent": "codex",
+        "kind": "id",
+        "source": "herdr:codex",
+        "value": "00000000-0000-0000-0000-000000000000"
+      },
+      "agent_status": "idle",
+      "completion_seq": 2508,
+      "cwd": "/work/proj",
+      "focused": false,
+      "foreground_cwd": "/work/proj",
+      "interactive_ready": true,
+      "name": "sample_agent",
+      "pane_id": "w1P:p4",
+      "revision": 1,
+      "state_change_seq": 2508,
+      "tab_id": "w1P:t1",
+      "terminal_id": "term_65db61a36ff8b61",
+      "terminal_title": "codex",
+      "terminal_title_stripped": "codex",
+      "workspace_id": "w1P"
+    },
+    "type": "agent_info"
+  }
+}

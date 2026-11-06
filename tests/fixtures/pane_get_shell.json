@@ -1,0 +1,17 @@
+{
+  "id": "cli:pane:get",
+  "result": {
+    "pane": {
+      "agent_status": "unknown",
+      "cwd": "/work/proj",
+      "focused": false,
+      "pane_id": "w1P:p1",
+      "tab_id": "w1P:t1",
+      "terminal_id": "term_shell_0001",
+      "terminal_title": "zsh",
+      "terminal_title_stripped": "zsh",
+      "workspace_id": "w1P"
+    },
+    "type": "pane_info"
+  }
+}

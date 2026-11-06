@@ -1,0 +1,29 @@
+{
+  "default_profile": {
+    "owner": "sol",
+    "worker": "ds",
+    "advisor": "none",
+    "pi_provider": "<provider>",
+    "cc_env_file": "",
+    "engine_map": {
+      "sol": "codex/gpt-6.1-sol:high",
+      "luna": "codex/gpt-6-luna:max",
+      "qoder": "qoder/Qwen3.8-Flash",
+      "cc": "cc",
+      "haiku": "cc/haiku",
+      "gw": "ccenv/<model>",
+      "ds": {
+        "owner": "pi/deepseek-v4.1-flash:low",
+        "worker": "pi/deepseek-v4.1-flash:low",
+        "advisor": "pi/deepseek-v4.1-flash:high"
+      }
+    }
+  },
+  "projects": {
+    "<repo-name>": {
+      "prefix": "<short>",
+      "context_file": "/absolute/path/to/project-context.md",
+      "trigger": ";xx.ctx"
+    }
+  }
+}

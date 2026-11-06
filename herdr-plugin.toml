@@ -1,0 +1,47 @@
+id = "forsakesoul.nakama"
+name = "Nakama"
+version = "0.1.0"
+min_herdr_version = "0.9.3"
+description = "Native Herdr plugin that creates, initializes and restores Owner/Worker/Advisor coding-agent teams."
+platforms = ["macos"]
+
+[[build]]
+command = ["go", "build", "-trimpath", "-o", "bin/nakama", "./cmd/nakama"]
+
+[[actions]]
+id = "up"
+title = "Herdr team: up"
+contexts = ["pane"]
+command = ["bin/nakama", "up"]
+
+[[actions]]
+id = "init"
+title = "Herdr team: init"
+contexts = ["pane"]
+command = ["bin/nakama", "init"]
+
+[[actions]]
+id = "status"
+title = "Herdr team: status"
+contexts = ["global"]
+command = ["bin/nakama", "status"]
+
+# rebind requires --team and confirmation arguments (see README "Restoring teams after a computer or Herdr restart").
+# Without arguments it only prints usage and exits non-zero, with no reads or writes; there is no --force equivalent.
+[[actions]]
+id = "rebind"
+title = "Herdr team: rebind (explicit rebind after restart, needs --team)"
+contexts = ["global"]
+command = ["bin/nakama", "rebind"]
+
+[[actions]]
+id = "pick"
+title = "Herdr team: pick engines and create a team"
+contexts = ["pane"]
+command = ["bin/nakama", "open-picker"]
+
+[[panes]]
+id = "picker"
+title = "Herdr team: pick engines"
+placement = "overlay"
+command = ["bin/nakama", "pick"]

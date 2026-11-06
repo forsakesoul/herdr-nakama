@@ -1,0 +1,13 @@
+{
+  "workspace_id": "w1P",
+  "workspace_label": "sample-workspace",
+  "workspace_cwd": "/work/proj",
+  "tab_id": "w1P:t1",
+  "tab_label": "active-tab",
+  "focused_pane_id": "w1P:p2",
+  "focused_pane_cwd": "/work/proj",
+  "focused_pane_agent": "claude",
+  "focused_pane_status": "idle",
+  "invocation_source": "api",
+  "correlation_id": "sample-0000"
+}

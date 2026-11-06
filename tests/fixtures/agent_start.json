@@ -1,0 +1,33 @@
+{
+  "id": "cli:agent:start",
+  "result": {
+    "agent": {
+      "agent": "codex",
+      "agent_status": "idle",
+      "cwd": "/work/proj",
+      "focused": false,
+      "foreground_cwd": "/work/proj",
+      "interactive_ready": true,
+      "name": "sample_design",
+      "pane_id": "w1P:p3",
+      "revision": 2,
+      "state_change_seq": 5914,
+      "tab_id": "w1P:t1",
+      "terminal_id": "term_65db61a36ff8b62",
+      "terminal_title": "codex --no-daemon --model gpt-6.1-sol -c 'model_reasoning_effort=\"high\"'  ",
+      "terminal_title_stripped": "codex --no-daemon --model gpt-6.1-sol -c 'model_reasoning_effort=\"high\"'",
+      "workspace_id": "w1P"
+    },
+    "argv": [
+      "codex",
+      "--no-daemon",
+      "--model",
+      "gpt-6.1-sol",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--no-alt-screen"
+    ],
+    "type": "agent_started"
+  }
+}

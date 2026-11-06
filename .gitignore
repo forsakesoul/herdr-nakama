@@ -1,0 +1,11 @@
+# Local runtime state and build output (never committed)
+*.log
+/bin/
+/nakama
+/cmd/nakama/nakama
+.DS_Store
+
+# Private user config/credentials (live in CONFIG_DIR, never in this repo)
+config.json
+.env
+local/
