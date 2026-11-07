@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f
 herdr plugin install forsakesoul/herdr-nakama
 # 2. 私有配置：仅在不存在时以 config.example.json 为模板生成（0600），再按需填写 pi_provider / cc_env_file（私有，勿入库）
 cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
-[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json > "$cfg")
+[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
 # 3. 绑定快捷键（追加到 ~/.config/herdr/config.toml）后重载配置
 herdr server reload-config
 ```

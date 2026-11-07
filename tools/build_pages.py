@@ -17,7 +17,7 @@ REPO = "https://github.com/forsakesoul/herdr-nakama"
 INSTALL = """herdr plugin install forsakesoul/herdr-nakama
 cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
 [ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && \\
-  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json > "$cfg")"""
+  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")"""
 KEYS = """[[keys.command]]
 key = "prefix+u"
 type = "plugin_action"
@@ -229,6 +229,7 @@ def page(media):
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?{FONTS}&display=swap">
 <style>{BASE_CSS}{THEME_CSS}</style>
+<noscript><style>[data-l="en"]{{display:revert}}</style></noscript>
 </head>
 <body>
 <div class="top"><div class="in">
@@ -255,7 +256,9 @@ function pick(l, keep) {{
 }}
 document.querySelectorAll(".langs button").forEach((b) => b.addEventListener("click", () => pick(b.dataset.set)));
 document.querySelectorAll(".cp").forEach((b) => b.addEventListener("click", async () => {{
-  await navigator.clipboard.writeText(b.closest(".term").querySelector("pre").textContent);
+  const pre = b.closest(".term").querySelector("pre");
+  try {{ await navigator.clipboard.writeText(pre.textContent); }}
+  catch {{ getSelection().selectAllChildren(pre); return; }}  // no clipboard access: leave the command selected for manual copy
   b.textContent = COPY[cur][1];
   setTimeout(() => (b.textContent = COPY[cur][0]), 1400);
 }}));

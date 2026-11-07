@@ -71,6 +71,7 @@ h2::before{content:"";display:inline-block;width:20px;height:20px;margin-right:1
 .video{border:2px solid var(--fg);box-shadow:6px 6px 0 var(--hi)}
 .langs button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
 </style>
+<noscript><style>[data-l="en"]{display:revert}</style></noscript>
 </head>
 <body>
 <div class="top"><div class="in">
@@ -95,7 +96,7 @@ h2::before{content:"";display:inline-block;width:20px;height:20px;margin-right:1
       <li><span class="num">1</span><div><p>Install the plugin and create your private config (never committed).</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">Copy</button></div><pre>herdr plugin install forsakesoul/herdr-nakama
 cfg=&quot;$(herdr plugin config-dir forsakesoul.nakama)/config.json&quot;
 [ -e &quot;$cfg&quot; ] || (umask 077 &amp;&amp; mkdir -p &quot;${cfg%/*}&quot; &amp;&amp; \
-  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json &gt; &quot;$cfg&quot;)</pre></div></div></li>
+  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o &quot;$cfg.tmp&quot; &amp;&amp; mv &quot;$cfg.tmp&quot; &quot;$cfg&quot;)</pre></div></div></li>
       <li><span class="num">2</span><div><p>Bind two keys in <code>~/.config/herdr/config.toml</code>, then <code>herdr server reload-config</code>.</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>config.toml</span><button type="button" class="cp">Copy</button></div><pre>[[keys.command]]
 key = &quot;prefix+u&quot;
 type = &quot;plugin_action&quot;
@@ -142,7 +143,7 @@ nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></d
       <li><span class="num">1</span><div><p>安装插件，生成私有配置（不入库）。</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">复制</button></div><pre>herdr plugin install forsakesoul/herdr-nakama
 cfg=&quot;$(herdr plugin config-dir forsakesoul.nakama)/config.json&quot;
 [ -e &quot;$cfg&quot; ] || (umask 077 &amp;&amp; mkdir -p &quot;${cfg%/*}&quot; &amp;&amp; \
-  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json &gt; &quot;$cfg&quot;)</pre></div></div></li>
+  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o &quot;$cfg.tmp&quot; &amp;&amp; mv &quot;$cfg.tmp&quot; &quot;$cfg&quot;)</pre></div></div></li>
       <li><span class="num">2</span><div><p>在 <code>~/.config/herdr/config.toml</code> 绑定两个快捷键，然后 <code>herdr server reload-config</code>。</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>config.toml</span><button type="button" class="cp">复制</button></div><pre>[[keys.command]]
 key = &quot;prefix+u&quot;
 type = &quot;plugin_action&quot;
@@ -189,7 +190,7 @@ nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></d
       <li><span class="num">1</span><div><p>プラグインをインストールし、非公開の設定を作成します（コミットしません）。</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">コピー</button></div><pre>herdr plugin install forsakesoul/herdr-nakama
 cfg=&quot;$(herdr plugin config-dir forsakesoul.nakama)/config.json&quot;
 [ -e &quot;$cfg&quot; ] || (umask 077 &amp;&amp; mkdir -p &quot;${cfg%/*}&quot; &amp;&amp; \
-  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json &gt; &quot;$cfg&quot;)</pre></div></div></li>
+  curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o &quot;$cfg.tmp&quot; &amp;&amp; mv &quot;$cfg.tmp&quot; &quot;$cfg&quot;)</pre></div></div></li>
       <li><span class="num">2</span><div><p><code>~/.config/herdr/config.toml</code> にキーを 2 つ割り当て、<code>herdr server reload-config</code> を実行します。</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>config.toml</span><button type="button" class="cp">コピー</button></div><pre>[[keys.command]]
 key = &quot;prefix+u&quot;
 type = &quot;plugin_action&quot;
@@ -238,7 +239,9 @@ function pick(l, keep) {
 }
 document.querySelectorAll(".langs button").forEach((b) => b.addEventListener("click", () => pick(b.dataset.set)));
 document.querySelectorAll(".cp").forEach((b) => b.addEventListener("click", async () => {
-  await navigator.clipboard.writeText(b.closest(".term").querySelector("pre").textContent);
+  const pre = b.closest(".term").querySelector("pre");
+  try { await navigator.clipboard.writeText(pre.textContent); }
+  catch { getSelection().selectAllChildren(pre); return; }  // no clipboard access: leave the command selected for manual copy
   b.textContent = COPY[cur][1];
   setTimeout(() => (b.textContent = COPY[cur][0]), 1400);
 }));
