@@ -40,3 +40,6 @@ jobs:
         run: go test -count=1 ./...
       - name: build
         run: go build -trimpath -o bin/nakama ./cmd/nakama
+      - name: docs/index.html is generated from tools/build_pages.py
+        if: matrix.go == 'stable'
+        run: python3 tools/build_pages.py --check
