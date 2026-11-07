@@ -17,15 +17,22 @@ concurrency:
 
 jobs:
   test:
-    name: Go (macOS)
+    name: Go ${{ matrix.go }} (macOS)
     # The plugin targets macOS only (tty_darwin.go, herdr-plugin.toml platforms).
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.24.x is the minimum in go.mod (users build the plugin with their own Go);
+        # stable matches current gofmt, whose alignment differs between releases.
+        go: ["1.24.x", "stable"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go }}
       - name: gofmt
+        if: matrix.go == 'stable'
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: go vet
         run: go vet ./...
