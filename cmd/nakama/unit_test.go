@@ -197,3 +197,49 @@ printf '{"result":{"agent":{"name":"","pane_id":"w0:p2","terminal_id":"term_p2",
 	}
 	eq(t, tm.Roles.Worker.LaunchIdentity.Session, "sess-late", "启动观测等到迟到的 session")
 }
+
+// 恢复已有重绑计划时，确认参数只能回显计划里已确认的值；任何不同都拒绝，不把新值套到旧计划上。
+func TestCheckPlanConfirm(t *testing.T) {
+	p := &RebindPlan{
+		Steps:             []RebindStep{{Role: "owner", New: Ident{Session: "s-owner"}}, {Role: "worker", New: Ident{Session: "s-worker"}}},
+		AnchorNew:         "term_new",
+		AnchorIdentityNew: &Ident{Session: "s-anchor"},
+	}
+	ok := map[string]rebindOpts{
+		"无确认参数":  {},
+		"回显单个角色": {confirm: map[string]string{"owner": "s-owner"}},
+		"回显全部":   {confirm: map[string]string{"owner": "s-owner", "worker": "s-worker", "anchor": "s-anchor"}, confirmAnchor: "term_new"},
+	}
+	for name, o := range ok {
+		eq(t, checkPlanConfirm(p, o), "", name+"：回显计划值应放行")
+	}
+	bad := map[string]rebindOpts{
+		"角色 session 不同":  {confirm: map[string]string{"owner": "other"}},
+		"计划里没有的角色":       {confirm: map[string]string{"advisor": "s-owner"}},
+		"锚点 session 不同":  {confirm: map[string]string{"anchor": "other"}},
+		"锚点 terminal 不同": {confirmAnchor: "term_other"},
+		"跨角色借用 session":  {confirm: map[string]string{"worker": "s-owner"}},
+	}
+	for name, o := range bad {
+		if checkPlanConfirm(p, o) == "" {
+			t.Errorf("%s：应拒绝", name)
+		}
+	}
+	if checkPlanConfirm(&RebindPlan{}, rebindOpts{confirm: map[string]string{"anchor": "s"}}) == "" {
+		t.Error("计划没有锚点身份时，确认锚点 session 应拒绝")
+	}
+}
+
+func TestStartArgs(t *testing.T) {
+	cx, _ := parseEngine("codex/gpt-6.1-sol:max")
+	eq(t, strings.Join(cx.startArgs(), " "),
+		`--no-daemon --model gpt-6.1-sol -c model_reasoning_effort="max" --dangerously-bypass-approvals-and-sandbox --no-alt-screen`, "codex 参数")
+	qd, _ := parseEngine("qoder/Qwen3.8-Flash")
+	eq(t, strings.Join(qd.startArgs(), " "), "--model Qwen3.8-Flash --permission-mode bypass_permissions", "qoder 参数")
+	for in, kind := range map[string]string{"codex/m": "codex", "qoder/m": "qoder", "ccenv/m": "ccenv"} {
+		e, _ := parseEngine(in)
+		if e.hint() == "" {
+			t.Errorf("%s 缺少启动提示", kind)
+		}
+	}
+}
