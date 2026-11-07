@@ -1,6 +1,6 @@
 id = "forsakesoul.nakama"
 name = "Nakama"
-version = "0.0.1"
+version = "0.1.0"
 min_herdr_version = "0.9.3"
 description = "Native Herdr plugin that creates, initializes and restores Owner/Worker/Advisor coding-agent teams."
 platforms = ["macos"]
