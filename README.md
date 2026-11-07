@@ -27,7 +27,7 @@ The name is a tribute, not an affiliation: this project is not associated with *
 herdr plugin install forsakesoul/herdr-nakama
 # 2. Private config: create from config.example.json only if missing (0600), then fill in pi_provider / cc_env_file as needed (private, never commit)
 cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
-[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json > "$cfg")
+[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
 # 3. Bind keys (append to ~/.config/herdr/config.toml), then reload
 herdr server reload-config
 ```

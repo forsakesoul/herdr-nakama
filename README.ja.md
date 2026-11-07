@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315
 herdr plugin install forsakesoul/herdr-nakama
 # 2. 非公開設定：存在しない場合のみ config.example.json から生成（0600）し、必要に応じて pi_provider / cc_env_file を記入（非公開、コミット禁止）
 cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
-[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json > "$cfg")
+[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
 # 3. キーバインドを ~/.config/herdr/config.toml に追記して設定を再読み込み
 herdr server reload-config
 ```
