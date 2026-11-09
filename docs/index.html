@@ -12,26 +12,28 @@
 body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.75 var(--body)}
 a{color:var(--link)}
 .top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-.top .in{max-width:1080px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:18px}
+.top .in{max-width:1200px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:18px}
 .brand{font-size:24px;color:var(--fg);text-decoration:none}
 .top nav{margin-left:auto;display:flex;align-items:center;gap:10px}
 .top nav>a{color:var(--fg);text-decoration:none;font-size:15px;padding:6px 10px}
 .langs{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
 .langs button{font:600 13px var(--body);border:0;background:transparent;color:var(--sub);padding:6px 12px;cursor:pointer}
 .langs button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
-main{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
-.hero{display:grid;grid-template-columns:1fr;gap:28px;padding:24px 0 8px}
+main{max-width:1200px;margin:0 auto;padding:40px 24px 80px}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:54px;align-items:center;padding:30px 0 36px}
+.hero-copy{display:grid;gap:26px;min-width:0}
 .crumb{font:600 13px var(--mono);text-transform:uppercase;letter-spacing:2px;margin:0}
-h1{font-size:clamp(36px,6vw,64px);line-height:1.18;margin:6px 0 0}
-.lead{font-size:19px;color:var(--sub);max-width:760px;margin:0}
+h1{font-size:clamp(36px,4.5vw,60px);line-height:1.18;margin:6px 0 0}
+.lead{font-size:17px;color:var(--sub);max-width:760px;margin:0}
 .ctas{display:flex;gap:14px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:999px;font-weight:700;text-decoration:none;color:var(--fg)}
 .video{display:block;width:100%;border-radius:var(--radius);background:#000;margin-top:8px}
 .note{color:var(--sub);font-size:14px;margin:10px 0 0}
 section{margin-top:72px}
 h2{font-size:clamp(26px,3.6vw,36px);margin:0 0 22px}
-.steps{list-style:none;padding:0;margin:0;display:grid;gap:26px}
-.steps li{display:grid;grid-template-columns:44px 1fr;gap:16px;align-items:start}
+.steps{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
+.steps li{display:grid;grid-template-columns:36px minmax(0,1fr);gap:16px;align-items:start}
+.steps li:last-child{grid-column:1/-1;padding:20px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--card)}
 .num{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:800 17px var(--mono);margin-top:2px}
 .steps p{margin:4px 0 12px}
 .term{border-radius:12px;overflow:hidden;background:var(--code);color:var(--codefg)}
@@ -43,7 +45,11 @@ h2{font-size:clamp(26px,3.6vw,36px);margin:0 0 22px}
 .term pre{margin:0;padding:14px 18px 16px;overflow-x:auto;font:14px/1.65 var(--mono)}
 code{font-family:var(--mono);font-size:.9em}
 kbd{font:600 .85em var(--mono);border:1px solid #bdb6a3;border-bottom-width:3px;border-radius:6px;padding:1px 7px;background:#fff}
-.crew{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.crew{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.crew .card{display:grid;grid-template-columns:36px minmax(0,250px) minmax(0,1fr);align-items:center;gap:20px}
+.crew .card h3{margin:0;font-size:17px}
+.crew .card p{font-size:15px}
+.role-index{font:16px var(--mono);color:var(--accent)}
 .card{border-radius:var(--radius);padding:22px}
 .card h3{margin:0 0 6px;font-size:19px}
 .card p{margin:0;color:var(--sub)}
@@ -52,7 +58,36 @@ kbd{font:600 .85em var(--mono);border:1px solid #bdb6a3;border-bottom-width:3px;
 .two p{margin:0 0 14px}
 footer{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);color:var(--sub);font-size:14px}
 [data-l]{display:none}[data-l].on{display:revert}
-@media (max-width:820px){.crew,.two{grid-template-columns:1fr}.top nav>a.hide-s{display:none}}
+.demo-link{align-self:center;color:var(--fg);font-size:15px;text-underline-offset:5px;padding:10px 0}
+.demo-sheet{margin:0;min-width:0;padding:16px;background:var(--card);border:2px solid var(--fg);border-radius:var(--radius);box-shadow:5px 5px 0 var(--hi);transform:rotate(.5deg);position:relative}
+.demo-sheet:before{content:"";position:absolute;right:24px;top:-12px;width:72px;height:22px;background:#c8372d55;transform:rotate(-4deg)}
+.demo-label{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--accent);letter-spacing:1px;margin:0 0 12px}
+.demo-sheet .video{aspect-ratio:16/9;object-fit:contain;margin:0;border:0;box-shadow:none;border-radius:7px}
+.demo-sheet .note{font-size:11px;margin:12px 0 0}
+.chapter-nav{display:flex;flex-wrap:wrap;gap:10px 28px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin-top:24px}
+.chapter-nav a{font-size:14px;color:var(--fg);text-decoration:none;padding:4px 0}
+.chapter-nav a:hover{color:var(--accent)}
+.section-heading{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:2px solid var(--fg);padding-bottom:16px;margin-bottom:24px}
+.section-heading h2{margin:0}.section-heading>span{font:10px var(--mono);color:var(--sub)}
+.restart{padding:30px 0;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line)}
+.two>*{min-width:0}.two p{overflow-wrap:anywhere}
+[id]{scroll-margin-top:90px}
+a:focus-visible,button:focus-visible,video:focus-visible{outline:3px solid var(--link);outline-offset:4px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media (max-width:900px){
+  .hero{grid-template-columns:minmax(0,1fr);gap:32px}.demo-sheet{max-width:700px;width:100%;justify-self:center}
+  .steps,.two{grid-template-columns:minmax(0,1fr)}.top nav>a.hide-s{display:none}
+  .crew .card{grid-template-columns:28px minmax(0,210px) minmax(0,1fr);gap:16px}
+}
+@media (max-width:540px){
+  main{padding:26px 20px 56px}.top .in{padding:12px 20px}.top nav{gap:4px}.top nav>a{font-size:12px;padding:6px}
+  .langs button{padding:7px 9px}.hero{padding-top:12px}.hero-copy{gap:22px}.crumb{font-size:10px;letter-spacing:1px}
+  .hero h1{font-size:36px}.demo-sheet{padding:12px}.chapter-nav{gap:10px 22px}
+  section{margin-top:48px}.section-heading{display:block}.section-heading>span{display:block;margin-top:10px}
+  h2{font-size:28px}.crew .card{grid-template-columns:24px minmax(0,1fr);gap:10px 12px;padding:18px}.crew .card p{grid-column:2}
+  .steps li{grid-template-columns:30px minmax(0,1fr);gap:12px}.num{width:30px;height:30px;font-size:14px}
+  .steps li:last-child{padding:16px}.term pre{font-size:12px;padding:12px}.two{gap:24px}
+}
 
 :root{--bg:#f6eedb;--fg:#1d2a44;--sub:#5a5f6b;--line:#dccfae;--accent:#c8372d;--hi:#f2c230;--card:#fbf6e8;--link:#1f5ea8;--code:#16223b;--codefg:#ebe4d1;
 --display:"ZCOOL KuaiLe","Chalkboard SE",cursive;--logo:"Permanent Marker",cursive;--body:"Noto Sans SC",-apple-system,"PingFang SC",sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--radius:14px}
@@ -83,14 +118,32 @@ h2::before{content:"";display:inline-block;width:20px;height:20px;margin-right:1
 <main>
 <div data-l="en">
   <div class="hero">
+    <div class="hero-copy">
     <p class="crumb">Herdr plugin · Owner / Worker / Advisor</p>
-    <h1>One pane in Herdr,<br><span class="hi">a whole crew</span>of coding agents.</h1>
+    <h1>One pane.<br><span class="hi">A whole crew.</span></h1>
     <p class="lead">Nakama builds an Owner / Worker / Advisor team from the pane you're in, initializes every role with the same protocol, and brings the same team back after a restart.</p>
-    <div class="ctas"><a class="btn primary" href="#install-en">Install</a><a class="btn" href="https://github.com/forsakesoul/herdr-nakama">GitHub ↗</a></div>
-    <video class="video" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=52a1d204"></video>
-    <p class="note">85-second walkthrough · illustration, not a screen recording</p>
+    <div class="ctas"><a class="btn primary" href="#install-en">Install ↗</a><a class="demo-link" href="#demo-en">Watch the demo ↓</a></div>
+    </div>
+    <figure class="demo-sheet" id="demo-en">
+    <div class="demo-label"><span>NAKAMA / FIELD LOG</span><span>01</span></div>
+    <video class="video" aria-label="Watch the demo" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=52a1d204"></video>
+    <figcaption class="note">85-second walkthrough · illustration, not a screen recording</figcaption>
+    </figure>
   </div>
-  <section id="install-en">
+  <nav class="chapter-nav" aria-label="Docs">
+    <a href="#crew-en">The crew</a>
+    <a href="#install-en">Install</a>
+    <a href="#restart-en">After a restart</a>
+  </nav>
+  <section id="crew-en">
+    <div class="section-heading"><h2>The crew</h2><span>OWNER / WORKER / ADVISOR</span></div>
+    <div class="crew">
+      <div class="card"><span class="role-index">01</span><h3>Owner · captain</h3><p>Investigates, freezes the handoff and accepts the result. Never writes project code.</p></div>
+      <div class="card"><span class="role-index">02</span><h3>Worker · crew at work</h3><p>The only one who changes code. Reports back when done, blocked or out of context.</p></div>
+      <div class="card"><span class="role-index">03</span><h3>Advisor · navigator<span class="tag">optional</span></h3><p>Optional. Checks the plan and reviews the diff independently.</p></div>
+    </div>
+  </section>
+  <section id="install-en" class="installation">
     <h2>Three steps to your first crew</h2>
     <ol class="steps">
       <li><span class="num">1</span><div><p>Install the plugin and create your private config (never committed).</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">Copy</button></div><pre>herdr plugin install forsakesoul/herdr-nakama
@@ -109,15 +162,7 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
       <li><span class="num">3</span><div><p>In a project pane press <kbd>prefix</kbd>+<kbd>u</kbd>, pick the engines and confirm. When the agents are up, press <kbd>prefix</kbd>+<kbd>i</kbd>.</p></div></li>
     </ol>
   </section>
-  <section>
-    <h2>The crew</h2>
-    <div class="crew">
-      <div class="card"><h3>Owner · captain</h3><p>Investigates, freezes the handoff and accepts the result. Never writes project code.</p></div>
-      <div class="card"><h3>Worker · crew at work</h3><p>The only one who changes code. Reports back when done, blocked or out of context.</p></div>
-      <div class="card"><h3>Advisor · navigator<span class="tag">optional</span></h3><p>Optional. Checks the plan and reviews the diff independently.</p></div>
-    </div>
-  </section>
-  <section class="two">
+  <section class="two restart" id="restart-en">
     <div><h2>After a restart, the same crew</h2><p>Herdr or the computer restarted and every terminal ID changed? Preflight first — read-only, zero writes — then confirm to bind the team again. Nothing is renamed or resent behind your back.</p></div>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">Copy</button></div><pre>nakama rebind --team &lt;id&gt; --preflight
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
@@ -130,14 +175,32 @@ nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></d
 </div>
 <div data-l="zh">
   <div class="hero">
+    <div class="hero-copy">
     <p class="crumb">Herdr 插件 · Owner / Worker / Advisor</p>
-    <h1>在 Herdr 里，一个 pane<br><span class="hi">拉起一整船</span>编码 agent 伙伴。</h1>
+    <h1>一个 pane，<br><span class="hi">一整船伙伴</span>。</h1>
     <p class="lead">Nakama 以你所在的 pane 为锚点，组建 Owner / Worker / Advisor 编组，用同一套协议初始化每个角色；电脑或 Herdr 重启后，还能把原来那支船团接回来。</p>
-    <div class="ctas"><a class="btn primary" href="#install-zh">安装</a><a class="btn" href="https://github.com/forsakesoul/herdr-nakama">GitHub ↗</a></div>
-    <video class="video" controls preload="metadata" playsinline poster="media/nakama-usage-zh.png?v=3dfe231d" src="media/nakama-usage-zh.mp4?v=90d12150"></video>
-    <p class="note">85 秒使用演示 · 画面为示意动画，不是真实录屏</p>
+    <div class="ctas"><a class="btn primary" href="#install-zh">安装 ↗</a><a class="demo-link" href="#demo-zh">先看演示 ↓</a></div>
+    </div>
+    <figure class="demo-sheet" id="demo-zh">
+    <div class="demo-label"><span>NAKAMA / FIELD LOG</span><span>01</span></div>
+    <video class="video" aria-label="先看演示" controls preload="metadata" playsinline poster="media/nakama-usage-zh.png?v=3dfe231d" src="media/nakama-usage-zh.mp4?v=90d12150"></video>
+    <figcaption class="note">85 秒使用演示 · 画面为示意动画，不是真实录屏</figcaption>
+    </figure>
   </div>
-  <section id="install-zh">
+  <nav class="chapter-nav" aria-label="文档">
+    <a href="#crew-zh">船员分工</a>
+    <a href="#install-zh">安装</a>
+    <a href="#restart-zh">重启接回</a>
+  </nav>
+  <section id="crew-zh">
+    <div class="section-heading"><h2>船员分工</h2><span>OWNER / WORKER / ADVISOR</span></div>
+    <div class="crew">
+      <div class="card"><span class="role-index">01</span><h3>Owner · 船长</h3><p>调研、冻结交接包、验收结果，自己不改项目代码。</p></div>
+      <div class="card"><span class="role-index">02</span><h3>Worker · 动手的船员</h3><p>唯一修改代码的人；完成、受阻或上下文快用完时主动回报。</p></div>
+      <div class="card"><span class="role-index">03</span><h3>Advisor · 航海士<span class="tag">可选</span></h3><p>可选。独立核验方案、审查 diff。</p></div>
+    </div>
+  </section>
+  <section id="install-zh" class="installation">
     <h2>三步组建你的第一支船团</h2>
     <ol class="steps">
       <li><span class="num">1</span><div><p>安装插件，生成私有配置（不入库）。</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">复制</button></div><pre>herdr plugin install forsakesoul/herdr-nakama
@@ -156,15 +219,7 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
       <li><span class="num">3</span><div><p>在项目 pane 按 <kbd>prefix</kbd>+<kbd>u</kbd>，选好引擎并确认；agent 起好后按 <kbd>prefix</kbd>+<kbd>i</kbd>。</p></div></li>
     </ol>
   </section>
-  <section>
-    <h2>船员分工</h2>
-    <div class="crew">
-      <div class="card"><h3>Owner · 船长</h3><p>调研、冻结交接包、验收结果，自己不改项目代码。</p></div>
-      <div class="card"><h3>Worker · 动手的船员</h3><p>唯一修改代码的人；完成、受阻或上下文快用完时主动回报。</p></div>
-      <div class="card"><h3>Advisor · 航海士<span class="tag">可选</span></h3><p>可选。独立核验方案、审查 diff。</p></div>
-    </div>
-  </section>
-  <section class="two">
+  <section class="two restart" id="restart-zh">
     <div><h2>重启之后，还是那支船团</h2><p>电脑或 Herdr 重启、终端编号全变了？先预检（只读、零写入），确认后重新绑定。不会背着你改名或重发任何消息。</p></div>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">复制</button></div><pre>nakama rebind --team &lt;id&gt; --preflight
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
@@ -177,14 +232,32 @@ nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></d
 </div>
 <div data-l="ja">
   <div class="hero">
+    <div class="hero-copy">
     <p class="crumb">Herdr プラグイン · Owner / Worker / Advisor</p>
-    <h1>Herdr の 1 つの pane から、<br><span class="hi">エージェントの一味</span>を。</h1>
+    <h1>1つの pane から、<br><span class="hi">仲間のチームを</span>。</h1>
     <p class="lead">Nakama はいまの pane を起点に Owner / Worker / Advisor のチームを組み、同じプロトコルで各ロールを初期化します。再起動後も、元の一味をそのまま呼び戻せます。</p>
-    <div class="ctas"><a class="btn primary" href="#install-ja">インストール</a><a class="btn" href="https://github.com/forsakesoul/herdr-nakama">GitHub ↗</a></div>
-    <video class="video" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=52a1d204"></video>
-    <p class="note">85 秒の使い方紹介（英語音声）· 画面はイメージ図で、実際の録画ではありません</p>
+    <div class="ctas"><a class="btn primary" href="#install-ja">インストール ↗</a><a class="demo-link" href="#demo-ja">デモを見る ↓</a></div>
+    </div>
+    <figure class="demo-sheet" id="demo-ja">
+    <div class="demo-label"><span>NAKAMA / FIELD LOG</span><span>01</span></div>
+    <video class="video" aria-label="デモを見る" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=52a1d204"></video>
+    <figcaption class="note">85 秒の使い方紹介（英語音声）· 画面はイメージ図で、実際の録画ではありません</figcaption>
+    </figure>
   </div>
-  <section id="install-ja">
+  <nav class="chapter-nav" aria-label="ドキュメント">
+    <a href="#crew-ja">一味の役割</a>
+    <a href="#install-ja">インストール</a>
+    <a href="#restart-ja">再起動のあと</a>
+  </nav>
+  <section id="crew-ja">
+    <div class="section-heading"><h2>一味の役割</h2><span>OWNER / WORKER / ADVISOR</span></div>
+    <div class="crew">
+      <div class="card"><span class="role-index">01</span><h3>Owner · 船長</h3><p>調査し、引き継ぎを確定し、結果を受け入れます。プロジェクトのコードは書きません。</p></div>
+      <div class="card"><span class="role-index">02</span><h3>Worker · 手を動かす船員</h3><p>コードを変更する唯一の存在。完了・ブロック・コンテキスト不足のときに報告します。</p></div>
+      <div class="card"><span class="role-index">03</span><h3>Advisor · 航海士<span class="tag">任意</span></h3><p>任意。方針を検証し、diff を独立にレビューします。</p></div>
+    </div>
+  </section>
+  <section id="install-ja" class="installation">
     <h2>3 ステップで最初の一味を</h2>
     <ol class="steps">
       <li><span class="num">1</span><div><p>プラグインをインストールし、非公開の設定を作成します（コミットしません）。</p><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">コピー</button></div><pre>herdr plugin install forsakesoul/herdr-nakama
@@ -203,15 +276,7 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
       <li><span class="num">3</span><div><p>プロジェクトの pane で <kbd>prefix</kbd>+<kbd>u</kbd> を押してエンジンを選び確定。エージェントが起動したら <kbd>prefix</kbd>+<kbd>i</kbd>。</p></div></li>
     </ol>
   </section>
-  <section>
-    <h2>一味の役割</h2>
-    <div class="crew">
-      <div class="card"><h3>Owner · 船長</h3><p>調査し、引き継ぎを確定し、結果を受け入れます。プロジェクトのコードは書きません。</p></div>
-      <div class="card"><h3>Worker · 手を動かす船員</h3><p>コードを変更する唯一の存在。完了・ブロック・コンテキスト不足のときに報告します。</p></div>
-      <div class="card"><h3>Advisor · 航海士<span class="tag">任意</span></h3><p>任意。方針を検証し、diff を独立にレビューします。</p></div>
-    </div>
-  </section>
-  <section class="two">
+  <section class="two restart" id="restart-ja">
     <div><h2>再起動しても、同じ一味</h2><p>Herdr やコンピューターが再起動して terminal ID がすべて変わっても大丈夫。まずプリフライト（読み取り専用・書き込みゼロ）、確認してから再バインドします。勝手に改名や再送はしません。</p></div>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">コピー</button></div><pre>nakama rebind --team &lt;id&gt; --preflight
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
