@@ -33,9 +33,9 @@ nakama rebind --team <id> --confirm-anchor <terminal>"""
 T = {
 "en": dict(
   docs="Docs", readme=f"{REPO}#readme", crumb="Herdr plugin · Owner / Worker / Advisor",
-  h1a="One pane in Herdr,", h1b="a whole crew", h1c="of coding agents.",
+  h1a="One pane.", h1b="A whole crew.", h1c="",
   lead="Nakama builds an Owner / Worker / Advisor team from the pane you're in, initializes every role with the same protocol, and brings the same team back after a restart.",
-  cta_install="Install", cta_github="GitHub",
+  cta_install="Install", cta_demo="Watch the demo", nav_restart="After a restart",
   video_note="85-second walkthrough · illustration, not a screen recording",
   steps_h="Three steps to your first crew",
   s1="Install the plugin and create your private config (never committed).",
@@ -54,9 +54,9 @@ T = {
   copy="Copy", copied="Copied", video="nakama-usage-en"),
 "zh": dict(
   docs="文档", readme=f"{REPO}/blob/main/README.zh-CN.md", crumb="Herdr 插件 · Owner / Worker / Advisor",
-  h1a="在 Herdr 里，一个 pane", h1b="拉起一整船", h1c="编码 agent 伙伴。",
+  h1a="一个 pane，", h1b="一整船伙伴", h1c="。",
   lead="Nakama 以你所在的 pane 为锚点，组建 Owner / Worker / Advisor 编组，用同一套协议初始化每个角色；电脑或 Herdr 重启后，还能把原来那支船团接回来。",
-  cta_install="安装", cta_github="GitHub",
+  cta_install="安装", cta_demo="先看演示", nav_restart="重启接回",
   video_note="85 秒使用演示 · 画面为示意动画，不是真实录屏",
   steps_h="三步组建你的第一支船团",
   s1="安装插件，生成私有配置（不入库）。",
@@ -75,9 +75,9 @@ T = {
   copy="复制", copied="已复制", video="nakama-usage-zh"),
 "ja": dict(
   docs="ドキュメント", readme=f"{REPO}/blob/main/README.ja.md", crumb="Herdr プラグイン · Owner / Worker / Advisor",
-  h1a="Herdr の 1 つの pane から、", h1b="エージェントの一味", h1c="を。",
+  h1a="1つの pane から、", h1b="仲間のチームを", h1c="。",
   lead="Nakama はいまの pane を起点に Owner / Worker / Advisor のチームを組み、同じプロトコルで各ロールを初期化します。再起動後も、元の一味をそのまま呼び戻せます。",
-  cta_install="インストール", cta_github="GitHub",
+  cta_install="インストール", cta_demo="デモを見る", nav_restart="再起動のあと",
   video_note="85 秒の使い方紹介（英語音声）· 画面はイメージ図で、実際の録画ではありません",
   steps_h="3 ステップで最初の一味を",
   s1="プラグインをインストールし、非公開の設定を作成します（コミットしません）。",
@@ -122,26 +122,28 @@ BASE_CSS = """
 body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.75 var(--body)}
 a{color:var(--link)}
 .top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-.top .in{max-width:1080px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:18px}
+.top .in{max-width:1200px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:18px}
 .brand{font-size:24px;color:var(--fg);text-decoration:none}
 .top nav{margin-left:auto;display:flex;align-items:center;gap:10px}
 .top nav>a{color:var(--fg);text-decoration:none;font-size:15px;padding:6px 10px}
 .langs{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
 .langs button{font:600 13px var(--body);border:0;background:transparent;color:var(--sub);padding:6px 12px;cursor:pointer}
 .langs button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
-main{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
-.hero{display:grid;grid-template-columns:1fr;gap:28px;padding:24px 0 8px}
+main{max-width:1200px;margin:0 auto;padding:40px 24px 80px}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:54px;align-items:center;padding:30px 0 36px}
+.hero-copy{display:grid;gap:26px;min-width:0}
 .crumb{font:600 13px var(--mono);text-transform:uppercase;letter-spacing:2px;margin:0}
-h1{font-size:clamp(36px,6vw,64px);line-height:1.18;margin:6px 0 0}
-.lead{font-size:19px;color:var(--sub);max-width:760px;margin:0}
+h1{font-size:clamp(36px,4.5vw,60px);line-height:1.18;margin:6px 0 0}
+.lead{font-size:17px;color:var(--sub);max-width:760px;margin:0}
 .ctas{display:flex;gap:14px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:999px;font-weight:700;text-decoration:none;color:var(--fg)}
 .video{display:block;width:100%;border-radius:var(--radius);background:#000;margin-top:8px}
 .note{color:var(--sub);font-size:14px;margin:10px 0 0}
 section{margin-top:72px}
 h2{font-size:clamp(26px,3.6vw,36px);margin:0 0 22px}
-.steps{list-style:none;padding:0;margin:0;display:grid;gap:26px}
-.steps li{display:grid;grid-template-columns:44px 1fr;gap:16px;align-items:start}
+.steps{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
+.steps li{display:grid;grid-template-columns:36px minmax(0,1fr);gap:16px;align-items:start}
+.steps li:last-child{grid-column:1/-1;padding:20px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--card)}
 .num{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:800 17px var(--mono);margin-top:2px}
 .steps p{margin:4px 0 12px}
 .term{border-radius:12px;overflow:hidden;background:var(--code);color:var(--codefg)}
@@ -153,7 +155,11 @@ h2{font-size:clamp(26px,3.6vw,36px);margin:0 0 22px}
 .term pre{margin:0;padding:14px 18px 16px;overflow-x:auto;font:14px/1.65 var(--mono)}
 code{font-family:var(--mono);font-size:.9em}
 kbd{font:600 .85em var(--mono);border:1px solid #bdb6a3;border-bottom-width:3px;border-radius:6px;padding:1px 7px;background:#fff}
-.crew{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.crew{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.crew .card{display:grid;grid-template-columns:36px minmax(0,250px) minmax(0,1fr);align-items:center;gap:20px}
+.crew .card h3{margin:0;font-size:17px}
+.crew .card p{font-size:15px}
+.role-index{font:16px var(--mono);color:var(--accent)}
 .card{border-radius:var(--radius);padding:22px}
 .card h3{margin:0 0 6px;font-size:19px}
 .card p{margin:0;color:var(--sub)}
@@ -162,7 +168,36 @@ kbd{font:600 .85em var(--mono);border:1px solid #bdb6a3;border-bottom-width:3px;
 .two p{margin:0 0 14px}
 footer{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);color:var(--sub);font-size:14px}
 [data-l]{display:none}[data-l].on{display:revert}
-@media (max-width:820px){.crew,.two{grid-template-columns:1fr}.top nav>a.hide-s{display:none}}
+.demo-link{align-self:center;color:var(--fg);font-size:15px;text-underline-offset:5px;padding:10px 0}
+.demo-sheet{margin:0;min-width:0;padding:16px;background:var(--card);border:2px solid var(--fg);border-radius:var(--radius);box-shadow:5px 5px 0 var(--hi);transform:rotate(.5deg);position:relative}
+.demo-sheet:before{content:"";position:absolute;right:24px;top:-12px;width:72px;height:22px;background:#c8372d55;transform:rotate(-4deg)}
+.demo-label{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--accent);letter-spacing:1px;margin:0 0 12px}
+.demo-sheet .video{aspect-ratio:16/9;object-fit:contain;margin:0;border:0;box-shadow:none;border-radius:7px}
+.demo-sheet .note{font-size:11px;margin:12px 0 0}
+.chapter-nav{display:flex;flex-wrap:wrap;gap:10px 28px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin-top:24px}
+.chapter-nav a{font-size:14px;color:var(--fg);text-decoration:none;padding:4px 0}
+.chapter-nav a:hover{color:var(--accent)}
+.section-heading{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:2px solid var(--fg);padding-bottom:16px;margin-bottom:24px}
+.section-heading h2{margin:0}.section-heading>span{font:10px var(--mono);color:var(--sub)}
+.restart{padding:30px 0;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line)}
+.two>*{min-width:0}.two p{overflow-wrap:anywhere}
+[id]{scroll-margin-top:90px}
+a:focus-visible,button:focus-visible,video:focus-visible{outline:3px solid var(--link);outline-offset:4px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media (max-width:900px){
+  .hero{grid-template-columns:minmax(0,1fr);gap:32px}.demo-sheet{max-width:700px;width:100%;justify-self:center}
+  .steps,.two{grid-template-columns:minmax(0,1fr)}.top nav>a.hide-s{display:none}
+  .crew .card{grid-template-columns:28px minmax(0,210px) minmax(0,1fr);gap:16px}
+}
+@media (max-width:540px){
+  main{padding:26px 20px 56px}.top .in{padding:12px 20px}.top nav{gap:4px}.top nav>a{font-size:12px;padding:6px}
+  .langs button{padding:7px 9px}.hero{padding-top:12px}.hero-copy{gap:22px}.crumb{font-size:10px;letter-spacing:1px}
+  .hero h1{font-size:36px}.demo-sheet{padding:12px}.chapter-nav{gap:10px 22px}
+  section{margin-top:48px}.section-heading{display:block}.section-heading>span{display:block;margin-top:10px}
+  h2{font-size:28px}.crew .card{grid-template-columns:24px minmax(0,1fr);gap:10px 12px;padding:18px}.crew .card p{grid-column:2}
+  .steps li{grid-template-columns:30px minmax(0,1fr);gap:12px}.num{width:30px;height:30px;font-size:14px}
+  .steps li:last-child{padding:16px}.term pre{font-size:12px;padding:12px}.two{gap:24px}
+}
 """
 
 def term(label, body, t):
@@ -181,14 +216,32 @@ def section_for(lang, t, media):
     return f"""
 <div data-l="{lang}">
   <div class="hero">
+    <div class="hero-copy">
     <p class="crumb">{t['crumb']}</p>
     <h1>{t['h1a']}<br><span class="hi">{t['h1b']}</span>{t['h1c']}</h1>
     <p class="lead">{t['lead']}</p>
-    <div class="ctas"><a class="btn primary" href="#install-{lang}">{t['cta_install']}</a><a class="btn" href="{REPO}">{t['cta_github']} ↗</a></div>
-    <video class="video" controls preload="metadata" playsinline poster="{asset(media, t['video'] + '.png')}" src="{asset(media, t['video'] + '.mp4')}"></video>
-    <p class="note">{t['video_note']}</p>
+    <div class="ctas"><a class="btn primary" href="#install-{lang}">{t['cta_install']} ↗</a><a class="demo-link" href="#demo-{lang}">{t['cta_demo']} ↓</a></div>
+    </div>
+    <figure class="demo-sheet" id="demo-{lang}">
+    <div class="demo-label"><span>NAKAMA / FIELD LOG</span><span>01</span></div>
+    <video class="video" aria-label="{t['cta_demo']}" controls preload="metadata" playsinline poster="{asset(media, t['video'] + '.png')}" src="{asset(media, t['video'] + '.mp4')}"></video>
+    <figcaption class="note">{t['video_note']}</figcaption>
+    </figure>
   </div>
-  <section id="install-{lang}">
+  <nav class="chapter-nav" aria-label="{t['docs']}">
+    <a href="#crew-{lang}">{t['crew_h']}</a>
+    <a href="#install-{lang}">{t['cta_install']}</a>
+    <a href="#restart-{lang}">{t['nav_restart']}</a>
+  </nav>
+  <section id="crew-{lang}">
+    <div class="section-heading"><h2>{t['crew_h']}</h2><span>OWNER / WORKER / ADVISOR</span></div>
+    <div class="crew">
+      <div class="card"><span class="role-index">01</span><h3>{t['owner_t']}</h3><p>{t['owner_d']}</p></div>
+      <div class="card"><span class="role-index">02</span><h3>{t['worker_t']}</h3><p>{t['worker_d']}</p></div>
+      <div class="card"><span class="role-index">03</span><h3>{t['advisor_t']}<span class="tag">{t['optional']}</span></h3><p>{t['advisor_d']}</p></div>
+    </div>
+  </section>
+  <section id="install-{lang}" class="installation">
     <h2>{t['steps_h']}</h2>
     <ol class="steps">
       <li><span class="num">1</span><div><p>{t['s1']}</p>{term('bash', INSTALL, t)}</div></li>
@@ -196,15 +249,7 @@ def section_for(lang, t, media):
       <li><span class="num">3</span><div><p>{t['s3']}</p></div></li>
     </ol>
   </section>
-  <section>
-    <h2>{t['crew_h']}</h2>
-    <div class="crew">
-      <div class="card"><h3>{t['owner_t']}</h3><p>{t['owner_d']}</p></div>
-      <div class="card"><h3>{t['worker_t']}</h3><p>{t['worker_d']}</p></div>
-      <div class="card"><h3>{t['advisor_t']}<span class="tag">{t['optional']}</span></h3><p>{t['advisor_d']}</p></div>
-    </div>
-  </section>
-  <section class="two">
+  <section class="two restart" id="restart-{lang}">
     <div><h2>{t['restart_h']}</h2><p>{t['restart_p']}</p></div>
     <div>{term('bash', REBIND, t)}</div>
   </section>
