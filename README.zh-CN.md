@@ -8,6 +8,12 @@ https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f
 
 ▶ 85 秒使用演示 · [English version](https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
 
+## 一张图看懂 Nakama
+
+![herdr-nakama 概览：Herdr 提供终端工作台，Nakama 创建和初始化 Owner、Worker 与可选 Advisor 编组，并支持查看状态和重启后重新绑定。](docs/media/nakama-overview-zh.png)
+
+图中的“独立窗口”对应 Herdr 的独立 pane；角色分工由提示词和协作协议约定。具体操作与恢复条件见下文。
+
 ## 为什么叫 Nakama
 
 *Nakama*（仲間）是《海贼王》里路飞对船员的称呼：不是雇员，也不是工具，而是各自负责一段航程、又把后背交给彼此的伙伴。这正是本插件要组建的团队：

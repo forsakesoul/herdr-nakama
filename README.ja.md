@@ -8,6 +8,12 @@ https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315
 
 ▶ 85 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
 
+## 図でわかる Nakama（英語版）
+
+![herdr-nakama の概要（英語）：Herdr がターミナル環境を提供し、Nakama が Owner・Worker・任意の Advisor のチームを作成・初期化します。状態確認と再起動後の再バインドにも対応します。](docs/media/nakama-overview-en.png)
+
+各ロールは Herdr の独立した pane で動作し、役割分担はプロンプトと共有の協働プロトコルで定められます。具体的な操作と復元条件は以下を参照してください。
+
 ## なぜ「Nakama」なのか
 
 *Nakama*（仲間）は『ONE PIECE』でルフィが船員を呼ぶ言葉です。部下でも道具でもなく、それぞれが航海の一部を担い、互いに背中を預け合う仲間。それがこのプラグインの作るチームの形です：

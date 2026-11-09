@@ -8,6 +8,12 @@ https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315
 
 ▶ 85-second usage video · [中文版](https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
 
+## Nakama at a glance
+
+![herdr-nakama overview: Herdr provides the terminal workspace; Nakama creates and initializes Owner, Worker and optional Advisor teams, shows their status and rebinds them after a restart.](docs/media/nakama-overview-en.png)
+
+Each role runs in a separate Herdr pane; role responsibilities are defined by prompts and a shared collaboration protocol. See below for operating instructions and recovery conditions.
+
 ## Why "Nakama"
 
 *Nakama* (仲間) is the word Monkey D. Luffy uses for his crew in *One Piece*: not staff or tools, but companions who each own a part of the voyage and trust the others with theirs. That is the shape of the team this plugin builds:
