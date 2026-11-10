@@ -117,6 +117,22 @@ File: `config.json`. **Never commit real providers / paths / credentials.**
 - The `projects` table only **references** context file paths and never copies their content; `init` stops if a file is missing or unreadable.
 - Before `init`, the current sha256 of `protocol.md` and the context file must equal the recorded values; on drift it refuses (asking you to `up` a new team) and never rewrites the hash.
 
+### Everyday Claude teams
+
+Based on the [Claude model selection guide](https://claude.dev/blog/which-claude-model-should-you-build-with/) (2026-11-09), keep Owners and Advisors on Opus / medium for design decisions and review. This project's preference is Haiku / medium for routine Workers. The guide recommends Sonnet for scoped coding; starting on Haiku here still requires full verification, with Sonnet / Opus assessed before creating a team for complex work.
+
+Merge `engine_map.claude` from `config.example.json` into your local config, then enter `claude` for each role in the picker or run:
+
+```sh
+nakama up --owner claude --worker claude --advisor claude
+```
+
+This optional preset leaves existing role defaults and private config untouched. `cc` remains Opus 5.5 / medium; the Worker resolves to `cc/haiku:medium`. The `haiku` alias follows local Claude Code, so check the actual model and effort after launch. Use `--advisor none` without independent review. For a known harder task, override `--worker cc/sonnet:medium` or `--worker cc/opus:medium`. `ccenv` still rejects effort; verify gateway and Pi models, parameters and availability against the actual provider.
+
+On failure, first establish a runnable test, build or endpoint check, then assess raising effort one level, then recommend Haiku → Sonnet → Opus if still needed. Assess an account-available Fable for the hardest technical work or when Opus / high falls short; no unverified model ID is preset. Compare total completion time, retries and acceptance results; the article's API prices are neither subscription charges nor measured savings here. Running teams never switch model or effort automatically. Report evidence and a recommendation, obtain user authorization, preserve a concise handoff at a safe stop, then create and fully initialize a team in a new pane. Do not rely on the previous model's hidden reasoning or use `rebind` to switch models.
+
+This shared protocol update changes `protocol_version` in all three languages. Old teams not yet initialized will fail the existing hash check and require a new team; do not rewrite state to bypass it. Existing role contexts are not refreshed automatically.
+
 ## Usage
 
 ```sh

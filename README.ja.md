@@ -117,6 +117,22 @@ herdr plugin action list --plugin forsakesoul.nakama
 - `projects` テーブルはコンテキストファイルのパスを**参照**するだけで、本文はコピーしません。ファイルが存在しない / 読めない場合 `init` は停止します。
 - `init` の前に `protocol.md` とコンテキストファイルの現在の sha256 が記録値と一致することを確認します。ずれていれば拒否し（新しいチームを `up` するよう案内）、ハッシュを自動更新することはありません。
 
+### Claude の日常編組
+
+[Claude モデル選択ガイド](https://claude.dev/blog/which-claude-model-should-you-build-with/)（2026-11-09）を参考に、Owner と Advisor は設計判断と審査を担う Opus / medium、日常の Worker は本プロジェクトの方針で Haiku / medium とします。ガイドは範囲が明確な実装に Sonnet を推奨しています。ここでは Haiku から始めても検証を省略せず、複雑な作業では編組前に Sonnet / Opus を評価します。
+
+`config.example.json` の `engine_map.claude` をローカル設定に追加し、選択画面で各ロールに `claude` を入力するか、次を実行します。
+
+```sh
+nakama up --owner claude --worker claude --advisor claude
+```
+
+任意のプリセットであり、既存のロール既定値やプライベート設定は変更しません。`cc` は Opus 5.5 / medium のまま、Worker は `cc/haiku:medium` に展開されます。`haiku` 別名はローカルの Claude Code に従うため、起動後に実際のモデルと effort を確認します。独立審査が不要なら `--advisor none`、より強い実行モデルが必要なら `--worker cc/sonnet:medium` または `--worker cc/opus:medium` で上書きします。`ccenv` は引き続き effort を受け付けません。ゲートウェイや Pi のモデル、引数と可用性は実際の provider で確認します。
+
+失敗時は実行可能なテスト、ビルドまたは API 検証を整え、次に effort を一段上げることを評価し、それでも不足すれば Haiku → Sonnet → Opus の昇格を提案します。Opus / high でも不足する場合や最難関の技術課題では、アカウントで利用できる Fable を評価し、未確認のモデル ID はプリセットしません。API 単価をサブスクリプション料金や本プロジェクトの実測効果とせず、総時間、再試行と受入結果で比較します。実行中のモデルや effort は自動変更しません。証拠と提案を報告してユーザーの承認を得て、安全な停止点で簡潔な交接包を保存し、新しい pane で編組を作成して完全に初期化します。旧モデルの隠れた推論に依存せず、`rebind` でモデルを切り替えません。
+
+今回の共有プロトコル更新は三言語の `protocol_version` を変更します。未初期化の旧編組は既存の hash 検証で拒否されるため、新しい編組が必要です。状態を書き換えて回避しません。既存ロールのコンテキストは自動更新されません。
+
 ## 使い方
 
 ```sh
