@@ -1,10 +1,39 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+// TestExampleClaudePreset 直接读取发布示例，避免角色预设与实际启动命令漂移。
+func TestExampleClaudePreset(t *testing.T) {
+	b, err := os.ReadFile("../../config.example.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &config{}
+	if err := json.Unmarshal(b, &c.root); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ role, input, command string }{
+		{"owner", "claude", "cc --model 'claude-opus-5-5' --effort 'medium'"},
+		{"worker", "claude", "cc --model 'haiku' --effort 'medium'"},
+		{"advisor", "claude", "cc --model 'claude-opus-5-5' --effort 'medium'"},
+		{"worker", "cc/sonnet:medium", "cc --model 'sonnet' --effort 'medium'"},
+	} {
+		s, err := c.pickEngine(tc.role, tc.input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, ok := parseEngine(s)
+		if !ok {
+			t.Fatalf("invalid engine for %s: %q", tc.role, s)
+		}
+		eq(t, g.paneCommand("", ""), tc.command, tc.role+"/"+tc.input)
+	}
+}
 
 // 配置与状态目录：Herdr 注入的目录优先，其次 XDG，最后 HOME 下的默认位置；改名后目录名固定为 nakama。
 func TestConfigAndStatePaths(t *testing.T) {

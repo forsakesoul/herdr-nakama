@@ -10,6 +10,11 @@
       "luna": "codex/gpt-6-luna:max",
       "qoder": "qoder/Qwen3.8-Flash",
       "cc": "cc",
+      "claude": {
+        "owner": "cc",
+        "worker": "cc/haiku:medium",
+        "advisor": "cc"
+      },
       "haiku": "cc/haiku",
       "gw": "ccenv/<model>",
       "ds": {

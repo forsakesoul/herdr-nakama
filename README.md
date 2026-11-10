@@ -117,6 +117,18 @@ File: `config.json`. **Never commit real providers / paths / credentials.**
 - The `projects` table only **references** context file paths and never copies their content; `init` stops if a file is missing or unreadable.
 - Before `init`, the current sha256 of `protocol.md` and the context file must equal the recorded values; on drift it refuses (asking you to `up` a new team) and never rewrites the hash.
 
+### Everyday Claude teams
+
+Based on the [Claude model selection guide](https://claude.dev/blog/which-claude-model-should-you-build-with/) (2026-11-09), keep Owners and Advisors on Opus / medium for design decisions and review. This project's preference is Haiku / medium for routine Workers. The guide recommends Sonnet for scoped coding; starting on Haiku here still requires full verification, with Sonnet / Opus assessed before creating a team for complex work.
+
+Merge `engine_map.claude` from `config.example.json` into the Herdr plugin config described above. In the target pane press `prefix+u`, enter `claude` for Owner / Worker / Advisor and confirm the summary to create the team. Check the launches, then press `prefix+i` to initialize. Use the plugin picker to keep the config and state directories consistent.
+
+This optional preset leaves existing role defaults and private config untouched. `cc` remains Opus 5.5 / medium; the Worker resolves to `cc/haiku:medium`. The `haiku` alias follows local Claude Code, so check the actual model and effort after launch. Enter `none` for Advisor without independent review. For a known harder task, enter `cc/sonnet:medium` or `cc/opus:medium` for Worker. `ccenv` still rejects effort; verify gateway and Pi models, parameters and availability against the actual provider.
+
+Follow the [shared protocol's Claude rules](prompts/en/protocol.md) for failure verification, model escalation and adjustment authorization. Existing teams keep their frozen engines; when adjustment is needed, hand off at a safe stop and create a team in a new pane under that protocol.
+
+Changing shared protocol content changes `protocol_version` for that language. If an old team's hash does not match at initialization, create a new team rather than rewriting state to bypass the check. Existing role contexts are not refreshed automatically.
+
 ## Usage
 
 ```sh

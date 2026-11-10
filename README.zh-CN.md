@@ -117,6 +117,18 @@ herdr plugin action list --plugin forsakesoul.nakama
 - `projects` 表只**引用**上下文文件路径，不复制正文；文件缺失/不可读时 `init` 停止。
 - `init` 前核对 `protocol.md` 与上下文文件的当前 sha256 等于记录值；漂移则拒绝（提示重新 `up` 新组），不自动改 hash。
 
+### Claude 日常编组
+
+参考 [Claude 模型选择指南](https://claude.dev/blog/which-claude-model-should-you-build-with/)（2026-11-09），结合本项目 Owner / Worker / Advisor 分工：Owner 与 Advisor 用 Opus / medium 负责设计裁决和审查，日常 Worker 按本项目偏好用 Haiku / medium。指南对明确范围的编码推荐 Sonnet；这里以 Haiku 为日常起点，必须保留完整验证，复杂任务在建组前评估 Sonnet / Opus。
+
+将 `config.example.json` 中的 `engine_map.claude` 合入上述 Herdr 插件配置后，在目标 pane 按 `prefix+u`，为 Owner / Worker / Advisor 分别填 `claude`，确认摘要后建组；启动核对完成再按 `prefix+i` 初始化。通过插件选择界面使用，保持配置与状态目录一致。
+
+这是可选预设，不更改现有默认角色或私有配置；`cc` 仍为 Opus 5.5 / medium，Worker 展开为 `cc/haiku:medium`，`haiku` 模型别名跟随本机 Claude Code，启动后需核对实际模型与 effort。无需独立审查时在 Advisor 栏填 `none`。已明确需要更强执行模型时在 Worker 栏填 `cc/sonnet:medium` 或 `cc/opus:medium`；`ccenv` 仍不接受 effort，网关和 Pi 的模型、参数及可用性按实际 provider 核对。
+
+失败验证、模型升级及调整授权遵循[共享协议中的 Claude 规则](prompts/zh/protocol.md)。现有编组的引擎保持冻结；需要调整时，在安全停点交接后按协议在新 pane 建组。
+
+共享协议内容变更会改变对应语言的 `protocol_version`；旧组初始化时若 hash 不匹配，需新建组，不能改写状态绕过。已有角色上下文不会自动刷新。
+
 ## 用法
 
 ```sh
