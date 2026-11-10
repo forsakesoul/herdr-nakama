@@ -121,17 +121,13 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 [Claude モデル選択ガイド](https://claude.dev/blog/which-claude-model-should-you-build-with/)（2026-11-09）を参考に、Owner と Advisor は設計判断と審査を担う Opus / medium、日常の Worker は本プロジェクトの方針で Haiku / medium とします。ガイドは範囲が明確な実装に Sonnet を推奨しています。ここでは Haiku から始めても検証を省略せず、複雑な作業では編組前に Sonnet / Opus を評価します。
 
-`config.example.json` の `engine_map.claude` をローカル設定に追加し、選択画面で各ロールに `claude` を入力するか、次を実行します。
+`config.example.json` の `engine_map.claude` を上記の Herdr プラグイン設定に追加します。対象 pane で `prefix+u` を押し、Owner / Worker / Advisor にそれぞれ `claude` を入力して、概要を確認して編組します。起動確認後に `prefix+i` で初期化します。プラグインの選択画面を使い、設定と状態のディレクトリを一致させます。
 
-```sh
-nakama up --owner claude --worker claude --advisor claude
-```
+任意のプリセットであり、既存のロール既定値やプライベート設定は変更しません。`cc` は Opus 5.5 / medium のまま、Worker は `cc/haiku:medium` に展開されます。`haiku` 別名はローカルの Claude Code に従うため、起動後に実際のモデルと effort を確認します。独立審査が不要なら Advisor 欄に `none`、より強い実行モデルが必要なら Worker 欄に `cc/sonnet:medium` または `cc/opus:medium` を入力します。`ccenv` は引き続き effort を受け付けません。ゲートウェイや Pi のモデル、引数と可用性は実際の provider で確認します。
 
-任意のプリセットであり、既存のロール既定値やプライベート設定は変更しません。`cc` は Opus 5.5 / medium のまま、Worker は `cc/haiku:medium` に展開されます。`haiku` 別名はローカルの Claude Code に従うため、起動後に実際のモデルと effort を確認します。独立審査が不要なら `--advisor none`、より強い実行モデルが必要なら `--worker cc/sonnet:medium` または `--worker cc/opus:medium` で上書きします。`ccenv` は引き続き effort を受け付けません。ゲートウェイや Pi のモデル、引数と可用性は実際の provider で確認します。
+失敗時の検証、モデル昇格と調整の承認は[共有プロトコルの Claude ルール](prompts/ja/protocol.md)に従います。既存の編組のエンジンは固定したままとし、調整が必要なら安全な停止点で引き継ぎ、プロトコルに従って新しい pane に編組を作成します。
 
-失敗時は実行可能なテスト、ビルドまたは API 検証を整え、次に effort を一段上げることを評価し、それでも不足すれば Haiku → Sonnet → Opus の昇格を提案します。Opus / high でも不足する場合や最難関の技術課題では、アカウントで利用できる Fable を評価し、未確認のモデル ID はプリセットしません。API 単価をサブスクリプション料金や本プロジェクトの実測効果とせず、総時間、再試行と受入結果で比較します。実行中のモデルや effort は自動変更しません。証拠と提案を報告してユーザーの承認を得て、安全な停止点で簡潔な交接包を保存し、新しい pane で編組を作成して完全に初期化します。旧モデルの隠れた推論に依存せず、`rebind` でモデルを切り替えません。
-
-今回の共有プロトコル更新は三言語の `protocol_version` を変更します。未初期化の旧編組は既存の hash 検証で拒否されるため、新しい編組が必要です。状態を書き換えて回避しません。既存ロールのコンテキストは自動更新されません。
+共有プロトコルの内容を変えると、その言語の `protocol_version` が変わります。旧編組の初期化時に hash が一致しなければ、新しい編組を作成し、状態を書き換えて回避しません。既存ロールのコンテキストは自動更新されません。
 
 ## 使い方
 

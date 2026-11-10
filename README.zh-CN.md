@@ -121,17 +121,13 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 参考 [Claude 模型选择指南](https://claude.dev/blog/which-claude-model-should-you-build-with/)（2026-11-09），结合本项目 Owner / Worker / Advisor 分工：Owner 与 Advisor 用 Opus / medium 负责设计裁决和审查，日常 Worker 按本项目偏好用 Haiku / medium。指南对明确范围的编码推荐 Sonnet；这里以 Haiku 为日常起点，必须保留完整验证，复杂任务在建组前评估 Sonnet / Opus。
 
-将 `config.example.json` 中的 `engine_map.claude` 合入本机配置后，可在选择界面为各角色填 `claude`，或运行：
+将 `config.example.json` 中的 `engine_map.claude` 合入上述 Herdr 插件配置后，在目标 pane 按 `prefix+u`，为 Owner / Worker / Advisor 分别填 `claude`，确认摘要后建组；启动核对完成再按 `prefix+i` 初始化。通过插件选择界面使用，保持配置与状态目录一致。
 
-```sh
-nakama up --owner claude --worker claude --advisor claude
-```
+这是可选预设，不更改现有默认角色或私有配置；`cc` 仍为 Opus 5.5 / medium，Worker 展开为 `cc/haiku:medium`，`haiku` 模型别名跟随本机 Claude Code，启动后需核对实际模型与 effort。无需独立审查时在 Advisor 栏填 `none`。已明确需要更强执行模型时在 Worker 栏填 `cc/sonnet:medium` 或 `cc/opus:medium`；`ccenv` 仍不接受 effort，网关和 Pi 的模型、参数及可用性按实际 provider 核对。
 
-这是可选预设，不更改现有默认角色或私有配置；`cc` 仍为 Opus 5.5 / medium，Worker 展开为 `cc/haiku:medium`，`haiku` 模型别名跟随本机 Claude Code，启动后需核对实际模型与 effort。无需独立审查时用 `--advisor none`。已明确需要更强执行模型时覆盖 `--worker cc/sonnet:medium` 或 `--worker cc/opus:medium`；`ccenv` 仍不接受 effort，网关和 Pi 的模型、参数及可用性按实际 provider 核对。
+失败验证、模型升级及调整授权遵循[共享协议中的 Claude 规则](prompts/zh/protocol.md)。现有编组的引擎保持冻结；需要调整时，在安全停点交接后按协议在新 pane 建组。
 
-失败时先建立可运行的测试、构建或接口验证，再评估 effort 提高一级，仍不足才建议 Haiku → Sonnet → Opus；Opus / high 仍不足或最困难的技术任务再评估账号可用的 Fable，不预置未经核验的模型 ID。比较完成任务的总耗时、重试和验收结果，文章 API 单价不代表订阅费用或本项目实测收益。运行中的编组不自动换模型或 effort；确需调整时报告证据与建议，取得用户授权后在安全停点保留精简交接包，再在新 pane 建组并完整初始化，不依赖旧模型隐藏推理，不用 `rebind` 换模型。
-
-本次共享协议更新会改变三种语言的 `protocol_version`；尚未初始化的旧组会按原 hash 校验拒绝，需新建组，不能改写状态绕过。已有角色上下文不会自动刷新。
+共享协议内容变更会改变对应语言的 `protocol_version`；旧组初始化时若 hash 不匹配，需新建组，不能改写状态绕过。已有角色上下文不会自动刷新。
 
 ## 用法
 

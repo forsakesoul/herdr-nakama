@@ -121,17 +121,13 @@ File: `config.json`. **Never commit real providers / paths / credentials.**
 
 Based on the [Claude model selection guide](https://claude.dev/blog/which-claude-model-should-you-build-with/) (2026-11-09), keep Owners and Advisors on Opus / medium for design decisions and review. This project's preference is Haiku / medium for routine Workers. The guide recommends Sonnet for scoped coding; starting on Haiku here still requires full verification, with Sonnet / Opus assessed before creating a team for complex work.
 
-Merge `engine_map.claude` from `config.example.json` into your local config, then enter `claude` for each role in the picker or run:
+Merge `engine_map.claude` from `config.example.json` into the Herdr plugin config described above. In the target pane press `prefix+u`, enter `claude` for Owner / Worker / Advisor and confirm the summary to create the team. Check the launches, then press `prefix+i` to initialize. Use the plugin picker to keep the config and state directories consistent.
 
-```sh
-nakama up --owner claude --worker claude --advisor claude
-```
+This optional preset leaves existing role defaults and private config untouched. `cc` remains Opus 5.5 / medium; the Worker resolves to `cc/haiku:medium`. The `haiku` alias follows local Claude Code, so check the actual model and effort after launch. Enter `none` for Advisor without independent review. For a known harder task, enter `cc/sonnet:medium` or `cc/opus:medium` for Worker. `ccenv` still rejects effort; verify gateway and Pi models, parameters and availability against the actual provider.
 
-This optional preset leaves existing role defaults and private config untouched. `cc` remains Opus 5.5 / medium; the Worker resolves to `cc/haiku:medium`. The `haiku` alias follows local Claude Code, so check the actual model and effort after launch. Use `--advisor none` without independent review. For a known harder task, override `--worker cc/sonnet:medium` or `--worker cc/opus:medium`. `ccenv` still rejects effort; verify gateway and Pi models, parameters and availability against the actual provider.
+Follow the [shared protocol's Claude rules](prompts/en/protocol.md) for failure verification, model escalation and adjustment authorization. Existing teams keep their frozen engines; when adjustment is needed, hand off at a safe stop and create a team in a new pane under that protocol.
 
-On failure, first establish a runnable test, build or endpoint check, then assess raising effort one level, then recommend Haiku → Sonnet → Opus if still needed. Assess an account-available Fable for the hardest technical work or when Opus / high falls short; no unverified model ID is preset. Compare total completion time, retries and acceptance results; the article's API prices are neither subscription charges nor measured savings here. Running teams never switch model or effort automatically. Report evidence and a recommendation, obtain user authorization, preserve a concise handoff at a safe stop, then create and fully initialize a team in a new pane. Do not rely on the previous model's hidden reasoning or use `rebind` to switch models.
-
-This shared protocol update changes `protocol_version` in all three languages. Old teams not yet initialized will fail the existing hash check and require a new team; do not rewrite state to bypass it. Existing role contexts are not refreshed automatically.
+Changing shared protocol content changes `protocol_version` for that language. If an old team's hash does not match at initialization, create a new team rather than rewriting state to bypass the check. Existing role contexts are not refreshed automatically.
 
 ## Usage
 

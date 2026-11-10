@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// TestExampleClaudePreset 直接读取发布示例，避免角色预设与实际启动命令漂移。
 func TestExampleClaudePreset(t *testing.T) {
 	b, err := os.ReadFile("../../config.example.json")
 	if err != nil {
