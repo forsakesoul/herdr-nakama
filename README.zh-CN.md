@@ -4,9 +4,9 @@
 
 在 [Herdr](https://herdr.dev) 里创建、初始化和恢复 Owner / Worker / Advisor 三角色编码 agent 编组的**Herdr 原生插件**（Go 实现，仅用标准库）。
 
-https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f
+https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0
 
-▶ 97 秒使用演示 · [English version](https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
+▶ 97 秒使用演示 · [English version](https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 一张图看懂 Nakama
 

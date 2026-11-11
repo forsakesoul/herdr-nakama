@@ -4,9 +4,9 @@
 
 [Herdr](https://herdr.dev) 上で Owner / Worker / Advisor の 3 ロールからなるコーディングエージェントのチームを作成・初期化・復元する **Herdr ネイティブプラグイン**です（Go 実装、標準ライブラリのみ使用）。
 
-https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315
+https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702
 
-▶ 97 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
+▶ 97 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 図でわかる Nakama（英語版）
 

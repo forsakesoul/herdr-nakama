@@ -4,9 +4,9 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 A **native [Herdr](https://herdr.dev) plugin** that creates, initializes and restores three-role coding-agent teams (Owner / Worker / Advisor). Written in Go using only the standard library.
 
-https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315
+https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702
 
-▶ 97-second usage video · [中文版](https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
+▶ 97-second usage video · [中文版](https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
 
 ## Nakama at a glance
 
