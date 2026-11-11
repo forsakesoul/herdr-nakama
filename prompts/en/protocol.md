@@ -22,7 +22,7 @@
 
 ## Architecture tasks
 
-- for cross-module interfaces, shared state lifecycles, permission isolation or contract migration, if the host has the architecture Skill installed, each role reads and uses it for its own role; the Owner adds call examples, trade-offs and key verification to the existing handoff package, the Advisor verifies independently, and the Worker implements along the frozen contract.
+- for cross-module interfaces, shared state lifecycles, permission isolation or contract migration, if the host has the architecture Skill (user-defined, not provided by the plugin) installed, each role reads and uses it for its own role; the Owner adds call examples, trade-offs and key verification to the existing handoff package, the Advisor verifies independently, and the Worker implements along the frozen contract.
 - When it is not installed, continue with the handoff's seam, invariants and acceptance criteria and note the gap; do not install it automatically or spawn Agents because of it, and do not start the architecture process for small changes.
 
 ## Claude model allocation (only when using Claude)
@@ -204,7 +204,7 @@ applies to every team and every role; the team only decides recipients and the r
 
 ### User-requested compaction (all roles)
 
-- when the user explicitly asks the current role session to compact, if the long-task Skill is installed, follow its automatic compaction branch to save this role's duties, current task and recovery state at a safe stop point, arrange a single native compaction of this session and resume after verifying it completed.
+- when the user explicitly asks the current role session to compact, if the [long-task](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill (a user-defined compaction Skill, not bundled with the plugin) is installed, follow its automatic compaction branch to save this role's duties, current task and recovery state at a safe stop point, arrange a single native compaction of this session and resume after verifying it completed.
 - This branch does not need the Owner to operate it and only controls the caller's own pane/session; it does not switch models automatically, re-initialize, reset request numbers, turn standby or blocked into execution, or widen write and communication authorization.
 - Existing PAUSED/BLOCKED requests still continue only under valid Owner resume control; the recovery package is not a new ruling or authorization.
 - Without an explicit compaction request continue with the policy above; without support, keep the recovery package and report the manual native compaction entry point, without simulating success.
