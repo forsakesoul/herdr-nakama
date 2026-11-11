@@ -49,6 +49,23 @@ func renderRole(tpl, variant string, incMid bool) string {
 	return out.String()
 }
 
+// 只取命中 variant 的 team-rule 块正文（[TEAM_UPDATE] 用它更新分工）。
+func teamRule(tpl, variant string) string {
+	var out strings.Builder
+	in := false
+	for _, line := range strings.Split(tpl, "\n") {
+		switch {
+		case line == "<!-- team-rule:"+variant+" -->":
+			in = true
+		case strings.HasPrefix(line, "<!-- /team-rule:"):
+			in = false
+		case in:
+			out.WriteString(line + "\n")
+		}
+	}
+	return out.String()
+}
+
 func b2i(b bool) int {
 	if b {
 		return 1
@@ -69,6 +86,38 @@ func (t *Team) mapping() string {
 	return s + fmt.Sprintf(L("消息实例：Owner=O%d；Worker=W%d；Advisor=%s"), o.Instance, w.Instance, adv)
 }
 
+// 映射之后的附加行：已停用实例、任务目录与清理命令。旧组（无任务目录、无停用实例）为空，prompt 不变。
+func (a *app) mappingExtras(t *Team) string {
+	var b strings.Builder
+	if len(t.Retired) > 0 {
+		var xs []string
+		for _, x := range t.Retired {
+			xs = append(xs, fmt.Sprintf("%s%d=%s(pane=%s)", strings.ToUpper(x.Role[:1]), x.Instance, x.Name, x.Pane))
+		}
+		fmt.Fprintf(&b, L("已停用实例（不再向其派单，也不接收其回报）：%s\n"), strings.Join(xs, "；"))
+	}
+	if t.TaskDir != "" {
+		exe, _ := os.Executable()
+		cmd := "HERDR_PLUGIN_STATE_DIR=" + posixQuote(a.st.dir) + " " + posixQuote(exe) + " clean --team " + t.TeamID + " --task <task_id> --yes"
+		fmt.Fprintf(&b, L("任务目录=%s。清理命令（仅在用户明确授权删除后执行）：%s\n"), t.TaskDir, cmd)
+	}
+	return b.String()
+}
+
+// [TEAM_UPDATE]：最新映射 + 该角色在新编组下的分工规则块。
+func (a *app) teamUpdatePrompt(t *Team, rn string) (string, error) {
+	variant := "none"
+	if t.hasAdvisor() {
+		variant = "advisor"
+	}
+	tpl, err := os.ReadFile(a.promptPath(rn))
+	if err != nil {
+		return "", a.fail(L("无法读取角色模板 %s：%v"), rn, err)
+	}
+	return fmt.Sprintf("[TEAM_UPDATE] team_rev=%d\n%s\n%s%s", t.TeamRev, t.mapping(), a.mappingExtras(t), teamRule(string(tpl), variant)) +
+		L("这是编组控制消息：以本条为准更新编组映射与分工，不回 ACK，不改变当前交接版本、冻结范围和授权。Owner 向新实例派单前，先核对被替换的旧执行者已停止写入。"), nil
+}
+
 // 组装完整 prompt；与旧实现一样去掉尾部换行。
 func (a *app) assemblePrompt(t *Team, rn string) (string, error) {
 	variant := "none"
@@ -76,7 +125,7 @@ func (a *app) assemblePrompt(t *Team, rn string) (string, error) {
 		variant = "advisor"
 	}
 	var b strings.Builder
-	b.WriteString(t.mapping() + "\n\n")
+	b.WriteString(t.mapping() + "\n" + a.mappingExtras(t) + "\n")
 	if t.Context != nil && t.Context.File != "" {
 		body, err := os.ReadFile(t.Context.File)
 		if err != nil {

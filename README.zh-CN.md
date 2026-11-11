@@ -4,9 +4,9 @@
 
 在 [Herdr](https://herdr.dev) 里创建、初始化和恢复 Owner / Worker / Advisor 三角色编码 agent 编组的**Herdr 原生插件**（Go 实现，仅用标准库）。
 
-https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f
+https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0
 
-▶ 85 秒使用演示 · [English version](https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
+▶ 97 秒使用演示 · [English version](https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 一张图看懂 Nakama
 
@@ -54,7 +54,7 @@ command = "forsakesoul.nakama.init"
 description = "nakama: init（初始化当前 anchor 的编组）"
 ```
 
-在目标 pane 按 `prefix+u` 弹出引擎选择界面（overlay）：依次选 Owner / Worker / Advisor（回车取默认，可输入 `engine_map` 简写或完整的 `<launcher>/<model>[:effort]`，Advisor 可填 `none`），确认摘要后以按键时聚焦的 pane 为锚点建组；`Ctrl-C` 取消（确认前不会产生任何建组副作用）。该锚点已有编组时只显示现有组与各角色冻结的引擎——不能在原锚点换模型，需要新模型请在新 pane 建组。选择界面只新建：确认期间该 pane 若已出现任何编组（含半组）也一律拒绝，不恢复、不接管；建组执行期间收到信号会让在途操作落盘后直接非零退出，不再停在结果页。核对 agent 起好后按 `prefix+i` 初始化；结果用 `herdr plugin action invoke status --plugin forsakesoul.nakama` 或 `herdr plugin log list --plugin forsakesoul.nakama` 查看。
+在目标 pane 按 `prefix+u` 弹出引擎选择界面（overlay）：依次选 Owner / Worker / Advisor（回车取默认，可输入 `engine_map` 简写或完整的 `<launcher>/<model>[:effort]`，Advisor 可填 `none`），确认摘要后以按键时聚焦的 pane 为锚点建组；`Ctrl-C` 取消（确认前不会产生任何建组副作用）。该 pane 是某个编组的锚点或角色 pane 时，显示该编组的管理菜单（增减 Advisor、替换 Worker / Advisor、清理任务目录，见「中途增减与替换角色」）。在册实例的引擎仍然冻结，换模型即替换实例。新建流程只新建：确认期间该 pane 若已出现任何编组（含半组）也一律拒绝，不恢复、不接管；建组执行期间收到信号会让在途操作落盘后直接非零退出，不再停在结果页。核对 agent 起好后按 `prefix+i` 初始化；结果用 `herdr plugin action invoke status --plugin forsakesoul.nakama` 或 `herdr plugin log list --plugin forsakesoul.nakama` 查看。
 
 > `up` action 仍保留原行为（按 `default_profile` 批量建组，或 CLI 传 `--owner/--worker/--advisor`），也用于半组恢复。命令行 `herdr plugin action invoke up/init/pick` 不携带调用方 pane，会以 UI 当前聚焦 pane 为锚点，所以 `pick` / `up` / `init` 请用快捷键（或在目标 pane 获得焦点时触发）。
 
@@ -67,7 +67,7 @@ description = "nakama: init（初始化当前 anchor 的编组）"
 ## 目录
 
 ```
-herdr-plugin.toml       manifest（actions: up / init / status / rebind / pick；pane: picker）
+herdr-plugin.toml       manifest（actions: up / init / status / rebind / pick；pane: picker；add / drop / swap / clean 经管理菜单或命令行使用）
 cmd/nakama/      实现（package main：config / engine / state / lock / identity / prompts / team …）
 bin/nakama       构建产物（不入库，见下）
 prompts/{en,zh,ja}/      各语言的 protocol.md + owner.md / worker.md / advisor.md
@@ -125,7 +125,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 这是可选预设，不更改现有默认角色或私有配置；`cc` 仍为 Opus 5.5 / medium，Worker 展开为 `cc/haiku:medium`，`haiku` 模型别名跟随本机 Claude Code，启动后需核对实际模型与 effort。无需独立审查时在 Advisor 栏填 `none`。已明确需要更强执行模型时在 Worker 栏填 `cc/sonnet:medium` 或 `cc/opus:medium`；`ccenv` 仍不接受 effort，网关和 Pi 的模型、参数及可用性按实际 provider 核对。
 
-失败验证、模型升级及调整授权遵循[共享协议中的 Claude 规则](prompts/zh/protocol.md)。现有编组的引擎保持冻结；需要调整时，在安全停点交接后按协议在新 pane 建组。
+失败验证、模型升级及调整授权遵循[共享协议中的 Claude 规则](prompts/zh/protocol.md)。在册实例的引擎保持冻结；需要调整时，在安全停点交接后替换该角色实例（见「中途增减与替换角色」），或按协议在新 pane 建组。
 
 共享协议内容变更会改变对应语言的 `protocol_version`；旧组初始化时若 hash 不匹配，需新建组，不能改写状态绕过。已有角色上下文不会自动刷新。
 
@@ -136,6 +136,10 @@ nakama up [--owner E] [--worker E] [--advisor E|none] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
 nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <role>=<session>]... [--confirm-anchor <terminal>]
+nakama add --team <id> [--engine E]
+nakama drop --team <id>
+nakama swap --team <id> --role worker|advisor [--engine E]
+nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 ```
 
 - 新组命名：`<项目短名 ≤8>_<12hex>`，未匹配时使用 `task_`；后缀由纳秒时间戳与 6 字节密码学随机数混合，经 SHA-256 取前 6 字节生成，保持外部工具可识别的固定格式。角色名 `<prefix>_design/_execute/_advisor`，全名 ≤32；已有组继续沿用原名。
@@ -143,7 +147,29 @@ nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <
 - 所有 Herdr 调用走 `HERDR_BIN_PATH`（缺省 `herdr`），argv 逐参数，不 eval、不拼 shell。
 - `split` 一律显式 `--pane/--cwd/--no-focus`。
 - 角色启动后若停在授权/信任对话框，`up` 会等待你在该 pane 完成授权；每个角色的一次取证只有一个等待上限 `NAKAMA_START_WAIT_SECONDS`（缺省 600 秒），等待期间不发送任何输入。
-- `init` 的锚点可以是任一编组角色 pane：焦点在角色 pane 时按 pane 找所属编组，并先核验调用者仍是该组的对应角色实例（只读，任何 prompt/rename 前拒绝）；同时命中多个编组时报错，须用 `--team` 指定。`up`/`pick` 仍只按锚点 pane 判断已有编组。
+- `init` 的锚点可以是任一编组角色 pane：焦点在角色 pane 时按 pane 找所属编组，并先核验调用者仍是该组的对应角色实例（只读，任何 prompt/rename 前拒绝）；同时命中多个编组时报错，须用 `--team` 指定。`up` 仍只按锚点 pane 判断已有编组；`pick` 在锚点或角色 pane 上都会进入该编组的管理菜单。
+
+## 中途增减与替换角色
+
+编组初始化之后，可以加入或移除独立 Advisor，也可以替换卡住的 Worker 或 Advisor。Owner 不可替换；同一时刻仍只有一个 Worker。
+
+- **入口**：在锚点或任一角色 pane 按 `prefix+u`，已有编组时显示管理菜单（`a` 添加 Advisor、`x` 移除、`v` 替换 Advisor、`w` 替换 Worker、`c` 清理任务目录），选引擎并确认后执行。命令行等价为 `nakama add / drop / swap --team <id>`。
+- **两步完成**：`add` / `swap` 只创建 pane 并启动新实例；核对新实例的模型与授权后按 `prefix+i`，`init` 初始化新角色，再向其余在册角色各投递一次 `[TEAM_UPDATE]`（最新映射加该角色的新分工规则）。`drop` 没有新实例，直接投递。
+- **只通知空闲角色**：`[TEAM_UPDATE]` 只投给身份核验通过且 idle/done 的角色；忙碌或被对话框阻塞的角色保留待通知标记（`status` 显示 `team_update=pending`），空闲后重按 `prefix+i`。
+- **旧实例**：被替换或移除的实例记入状态的 `retired`，其 pane 不关闭、不改名、不再收到插件输入。替换 Worker 前请确认旧 Worker 已停止写入，之后自行处理该 pane。
+- **实例号不复用**：新实例为 `W2`、`A2`…，任务名为 `<prefix>_execute2`、`<prefix>_advisor2`…；首个实例沿用原名。
+- **前置条件**：编组处于 `initialized`、没有未确认副作用和未完成的 rebind，且 `protocol.md` 与上下文文件的 hash 未变。升级插件后协议已变化的旧组不能变更，需新建组。
+- **中断恢复**：变更中途失败时编组停在 `phase=changing`，`init` 会拒绝；核对后重跑同一命令或 `up` 补齐。
+
+## 任务目录与清理
+
+新建的编组带一个任务目录 `<项目目录>/.nakama/<编组ID>/`，路径记录在状态里并写进各角色的初始化提示词。`.nakama/.gitignore` 的内容是 `*`，整个目录不出现在 `git status` 和 diff 中。
+
+- **用途**：Owner 为每个业务任务创建 `<task_id>/` 子目录；交接包、NOTICE 和 Advisor 的结论各写成一个文件（如 `op_x_h1.md`、`W1-003.md`、`A1-002.md`），写后不改。角色之间的 prompt 只带消息头和文件路径；写文件不等于投递，仍要实际发送 NOTICE。中途加入或替换的角色从这里读取最新交接。规则见[共享协议](prompts/zh/protocol.md)。
+- **不自动清理**：任务完成不等于删除授权。Owner 交付时报告一次目录路径；只有你明确说可以删除，它才执行提示词里给出的清理命令。
+- **自己清理**：管理菜单的 `c`，或 `nakama clean`。不带选择参数时列出所有任务目录（文件数、大小、最后修改时间），在终端里输入编号选择并确认；`--team <id> --task <task_id>` 或 `--all` 直接选择，非交互环境需加 `--yes`。
+- **防误删**：只删除状态里记录的任务目录下的直接子目录，不跟随符号链接；该编组的 Worker 或 Advisor（含已停用实例）处于 working/blocked，或状态查不到时，默认拒绝，加 `--force` 才删。请求是否结清由 Owner 按协议判断，插件无法得知。
+- **旧组**：本版本之前创建的编组没有任务目录，仍按正文内联的方式通信。
 
 ## 状态与安全
 
@@ -195,8 +221,8 @@ CLI 无法证明 Herdr server 命名空间；锚点证据是 `pane get` 的 work
 **与 Bridge 的竞争。** Herdr 的 rename 没有比较并交换语义，读取与改名之间无法从数学上排除 Bridge 的自动命名。
 检测到漂移时停止，计划保留；插件不追逐、不修改 Bridge。成功不代表名称永久不变，之后的 `init` / `prompt` 仍按严格规则检查。
 
-**状态兼容。** 本版本写出 `schema_version: 2`，新增 `rebind_pending` 与 `rebinds`（审计）。旧版本只接受 schema 1，读到 2 即拒绝，
-因此不会在丢失新字段的情况下覆盖状态；要回到旧版本，需先确认没有未完成的计划并自行处理状态文件。schema 1 仍可读取，保存后升级为 2。
+**状态兼容。** 本版本写出 `schema_version: 3`：schema 2 新增 `rebind_pending` 与 `rebinds`（审计），schema 3 新增 `task_dir`、`retired` 与角色的 `team_update_pending`。旧版本读到更高的 schema 即拒绝，
+因此不会在丢失新字段的情况下覆盖状态；要回到旧版本，需先确认没有未完成的计划并自行处理状态文件。schema 1 与 2 仍可读取，保存后升级为 3。
 
 **不会自动发生。** `init` 与 `up` 不执行重绑；`init` 在检测到“仅 terminal 或名称变化的候选”时只提示 `可能需要显式 rebind --team <id>`，
 不标 stale、不写状态。`status` 只读，按记录 pane 观测，输出 `binding=bound|candidate|unverified`，并区分生命周期 `status` 与绑定是否有效。`bound` 还要求当前任务名等于记录的角色名；名称为他人名或为空时至多 `unverified`。`candidate` 只是候选（同 pane 与 kind，terminal 或名称已变），不保证 `rebind` 能通过预检，需先 `--preflight` 核对。
@@ -233,7 +259,7 @@ go build -trimpath -o bin/nakama ./cmd/nakama
 
 ## 暂不支持
 
-popup / TUI、`startup` / `events`、`add` / `drop` / `swap` / `sync`、接管旧组、CI。
+popup / TUI、`startup` / `events`、多个 Worker 并行、替换 Owner、`sync`、接管旧组、CI。
 
 ## 致谢
 

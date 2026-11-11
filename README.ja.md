@@ -4,9 +4,9 @@
 
 [Herdr](https://herdr.dev) 上で Owner / Worker / Advisor の 3 ロールからなるコーディングエージェントのチームを作成・初期化・復元する **Herdr ネイティブプラグイン**です（Go 実装、標準ライブラリのみ使用）。
 
-https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315
+https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702
 
-▶ 85 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
+▶ 97 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 図でわかる Nakama（英語版）
 
@@ -54,7 +54,7 @@ command = "forsakesoul.nakama.init"
 description = "nakama: init（現在のアンカーのチームを初期化）"
 ```
 
-対象 pane で `prefix+u` を押すとエンジン選択画面（overlay）が開きます。Owner / Worker / Advisor を順に選び（Enter で既定値。`engine_map` の短縮名か完全な `<launcher>/<model>[:effort]` を入力でき、Advisor は `none` も可）、概要を確認すると、キーを押した時点でフォーカスされていた pane をアンカーとしてチームを作成します。`Ctrl-C` でキャンセル（確認前は何も作成されません）。アンカーにすでにチームがある場合は既存チームと各ロールの固定済みエンジンのみ表示します——同じアンカーでモデルは変更できません。新しいモデルを使う場合は新しい pane でチームを作成してください。選択画面は新規作成専用です。確認中にその pane にチーム（作りかけを含む）が現れた場合も拒否し、復旧や引き継ぎはしません。作成中にシグナルを受けると、実行中の操作を永続化してから非ゼロで終了し、結果画面には留まりません。エージェントの起動を確認したら `prefix+i` で初期化します。結果は `herdr plugin action invoke status --plugin forsakesoul.nakama` または `herdr plugin log list --plugin forsakesoul.nakama` で確認できます。
+対象 pane で `prefix+u` を押すとエンジン選択画面（overlay）が開きます。Owner / Worker / Advisor を順に選び（Enter で既定値。`engine_map` の短縮名か完全な `<launcher>/<model>[:effort]` を入力でき、Advisor は `none` も可）、概要を確認すると、キーを押した時点でフォーカスされていた pane をアンカーとしてチームを作成します。`Ctrl-C` でキャンセル（確認前は何も作成されません）。その pane があるチームのアンカーまたはロール pane である場合は、そのチームの管理メニュー（Advisor の追加・削除、Worker / Advisor の交代、タスクディレクトリの削除。「途中でのロールの追加・削除・交代」参照）を表示します。在籍インスタンスのエンジンは固定のままで、モデルを変えるにはインスタンスを交代させます。新規作成のフローは新規作成専用です。確認中にその pane にチーム（作りかけを含む）が現れた場合も拒否し、復旧や引き継ぎはしません。作成中にシグナルを受けると、実行中の操作を永続化してから非ゼロで終了し、結果画面には留まりません。エージェントの起動を確認したら `prefix+i` で初期化します。結果は `herdr plugin action invoke status --plugin forsakesoul.nakama` または `herdr plugin log list --plugin forsakesoul.nakama` で確認できます。
 
 > `up` アクションは従来の動作（`default_profile` に従ってチームを作成、または CLI で `--owner/--worker/--advisor` を指定）を維持し、作りかけのチームの再開にも使います。シェルからの `herdr plugin action invoke up/init/pick` は呼び出し元の pane を渡さず、UI で現在フォーカスされている pane をアンカーにするため、`pick` / `up` / `init` はキーバインドで（または対象 pane にフォーカスがある状態で）実行してください。
 
@@ -125,7 +125,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 任意のプリセットであり、既存のロール既定値やプライベート設定は変更しません。`cc` は Opus 5.5 / medium のまま、Worker は `cc/haiku:medium` に展開されます。`haiku` 別名はローカルの Claude Code に従うため、起動後に実際のモデルと effort を確認します。独立審査が不要なら Advisor 欄に `none`、より強い実行モデルが必要なら Worker 欄に `cc/sonnet:medium` または `cc/opus:medium` を入力します。`ccenv` は引き続き effort を受け付けません。ゲートウェイや Pi のモデル、引数と可用性は実際の provider で確認します。
 
-失敗時の検証、モデル昇格と調整の承認は[共有プロトコルの Claude ルール](prompts/ja/protocol.md)に従います。既存の編組のエンジンは固定したままとし、調整が必要なら安全な停止点で引き継ぎ、プロトコルに従って新しい pane に編組を作成します。
+失敗時の検証、モデル昇格と調整の承認は[共有プロトコルの Claude ルール](prompts/ja/protocol.md)に従います。在籍インスタンスのエンジンは固定したままとし、調整が必要なら安全な停止点で引き継いでそのロールのインスタンスを交代させるか（「途中でのロールの追加・削除・交代」参照）、プロトコルに従って新しい pane に編組を作成します。
 
 共有プロトコルの内容を変えると、その言語の `protocol_version` が変わります。旧編組の初期化時に hash が一致しなければ、新しい編組を作成し、状態を書き換えて回避しません。既存ロールのコンテキストは自動更新されません。
 
@@ -136,6 +136,10 @@ nakama up [--owner E] [--worker E] [--advisor E|none] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
 nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <role>=<session>]... [--confirm-anchor <terminal>]
+nakama add --team <id> [--engine E]
+nakama drop --team <id>
+nakama swap --team <id> --role worker|advisor [--engine E]
+nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 ```
 
 - 新しいチーム名：`<プロジェクト短縮名 ≤8>_<12hex>`、一致するプロジェクトがなければ `task_`。サフィックスはナノ秒タイムスタンプと 6 バイトの暗号学的乱数を混ぜ、SHA-256 の先頭 6 バイトから生成し、外部ツールが認識できる固定形式を保ちます。ロール名は `<prefix>_design/_execute/_advisor`、全長 ≤32。既存チームは元の名前を使い続けます。
@@ -143,7 +147,29 @@ nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <
 - すべての Herdr 呼び出しは `HERDR_BIN_PATH`（既定 `herdr`）を経由し、argv は引数ごとに渡します。eval やシェル文字列の連結はしません。
 - `split` は常に `--pane/--cwd/--no-focus` を明示します。
 - 起動後にロールが認可 / 信頼ダイアログで止まった場合、`up` はその pane で認可されるのを待ちます。各ロールの 1 回の取得には待機上限 `NAKAMA_START_WAIT_SECONDS`（既定 600 秒）が 1 つだけあり、待機中は入力を送りません。
-- `init` のアンカーはチームの任意のロール pane で構いません。ロール pane にフォーカスがある場合は pane から所属チームを探し、呼び出し元がまだそのチームの該当ロールインスタンスであることを先に検証します（読み取り専用。prompt/rename の前に拒否）。複数のチームに一致した場合はエラーとなり `--team` の指定が必要です。`up`/`pick` は引き続きアンカー pane のみで既存チームを判定します。
+- `init` のアンカーはチームの任意のロール pane で構いません。ロール pane にフォーカスがある場合は pane から所属チームを探し、呼び出し元がまだそのチームの該当ロールインスタンスであることを先に検証します（読み取り専用。prompt/rename の前に拒否）。複数のチームに一致した場合はエラーとなり `--team` の指定が必要です。`up` は引き続きアンカー pane のみで既存チームを判定します。`pick` はアンカーでもロール pane でもそのチームの管理メニューを開きます。
+
+## 途中でのロールの追加・削除・交代
+
+チームの初期化後に、独立 Advisor を追加・削除したり、止まってしまった Worker や Advisor を交代させたりできます。Owner は交代できず、Worker は常に 1 つだけです。
+
+- **入口**：アンカーまたは任意のロール pane で `prefix+u` を押すと、既存チームでは管理メニューが開きます（`a` Advisor を追加、`x` 外す、`v` Advisor を交代、`w` Worker を交代、`c` タスクディレクトリを削除）。エンジンを選んで確認すると実行されます。CLI では `nakama add / drop / swap --team <id>` です。
+- **2 段階**：`add` / `swap` は pane を作成して新しいインスタンスを起動するだけです。モデルと権限を確認したら `prefix+i` を押します。`init` が新しいロールを初期化し、ほかの在籍ロールに `[TEAM_UPDATE]`（最新のマッピングとそのロールの新しい分担規則）を 1 回ずつ配信します。`drop` は新しいインスタンスがないため、すぐに配信します。
+- **アイドルのロールにだけ通知**：`[TEAM_UPDATE]` は識別の検証に通り、idle/done のロールにだけ送ります。作業中やダイアログで止まっているロールには未通知の印が残り（`status` に `team_update=pending` と表示）、アイドルになってからもう一度 `prefix+i` を押します。
+- **旧インスタンス**：交代または削除されたインスタンスは状態の `retired` に記録されます。その pane は閉じず、名前も変えず、プラグインからの入力も送りません。Worker を交代させる前に旧 Worker が書き込みを止めたことを確認し、その pane はご自身で処理してください。
+- **インスタンス番号は再利用しません**：新しいインスタンスは `W2`、`A2`…、名前は `<prefix>_execute2`、`<prefix>_advisor2`… です。最初のインスタンスは元の名前のままです。
+- **前提条件**：チームが `initialized` で、未確認の副作用や未完了の rebind がなく、`protocol.md` とコンテキストファイルの hash が変わっていないこと。プロトコル変更前に作成したチームは変更できないため、新しいチームを作成してください。
+- **中断からの復旧**：変更が途中で失敗するとチームは `phase=changing` のままになり、`init` は拒否します。確認のうえ、同じコマンドまたは `up` を再実行して完了させます。
+
+## タスクディレクトリと削除
+
+新しく作成したチームにはタスクディレクトリ `<プロジェクトディレクトリ>/.nakama/<チーム ID>/` があり、そのパスは状態に記録され、各ロールの初期化プロンプトに書き込まれます。`.nakama/.gitignore` の内容は `*` で、ディレクトリ全体が `git status` や diff に現れません。
+
+- **用途**：Owner は業務タスクごとに `<task_id>/` サブディレクトリを作成します。引き継ぎパッケージ、NOTICE、Advisor の結論はそれぞれ 1 ファイル（例：`op_x_h1.md`、`W1-003.md`、`A1-002.md`）として書き、書いた後は変更しません。ロール間の prompt にはメッセージヘッダーとファイルパスだけを載せます。ファイルを書いただけでは配信にならず、NOTICE は実際に送る必要があります。途中で参加または交代したロールは、ここから最新の引き継ぎを読みます。規則は[共有プロトコル](prompts/ja/protocol.md)を参照してください。
+- **自動では削除しません**：タスクの完了は削除の許可ではありません。Owner は納品時にディレクトリのパスを 1 回報告し、削除してよいと明示された後にのみ、プロンプトにある削除コマンドを実行します。
+- **自分で削除する**：管理メニューの `c`、または `nakama clean`。選択を指定しないとすべてのタスクディレクトリ（ファイル数、サイズ、最終更新）を一覧し、端末では番号で選んで確認できます。`--team <id> --task <task_id>` または `--all` で直接選択でき、非対話環境では `--yes` が必要です。
+- **誤削除の防止**：状態に記録されたタスクディレクトリ直下のサブディレクトリだけを削除し、シンボリックリンクはたどりません。そのチームの Worker または Advisor（停止済みインスタンスを含む）が working/blocked の間、または状態を確認できないときは既定で拒否し、`--force` を付けたときだけ削除します。リクエストが決着しているかどうかは Owner がプロトコルに従って判断し、プラグインにはわかりません。
+- **以前のチーム**：このバージョンより前に作成したチームにはタスクディレクトリがなく、従来どおり本文をインラインで送ります。
 
 ## 状態と安全性
 
@@ -195,8 +221,8 @@ CLI では Herdr サーバーの名前空間を証明できません。アンカ
 **Bridge との競合。** Herdr の rename には compare-and-swap の意味論がないため、読み取りと改名の間に Bridge が自動命名する可能性を数学的に排除できません。
 ずれを検出したら停止して計画を保持します。プラグインは Bridge を追いかけたり変更したりしません。成功しても名前が永久に変わらないとは限らず、その後の `init` / `prompt` は引き続き厳格なルールで検査します。
 
-**状態の互換性。** このバージョンは `schema_version: 2` を書き込み、`rebind_pending` と `rebinds`（監査）を追加します。旧バージョンは schema 1 のみ受け付け、2 を読むと拒否するため、
-新しいフィールドを失った状態で上書きされることはありません。旧バージョンに戻す場合は、未完了の計画がないことを確認し、状態ファイルを自分で処理してください。schema 1 は引き続き読み込め、保存時に 2 へ更新されます。
+**状態の互換性。** このバージョンは `schema_version: 3` を書き込みます：schema 2 で `rebind_pending` と `rebinds`（監査）、schema 3 で `task_dir`、`retired`、ロールごとの `team_update_pending` を追加しました。旧バージョンはより高い schema を読むと拒否するため、
+新しいフィールドを失った状態で上書きされることはありません。旧バージョンに戻す場合は、未完了の計画がないことを確認し、状態ファイルを自分で処理してください。schema 1 と 2 は引き続き読み込め、保存時に 3 へ更新されます。
 
 **自動では行われないこと。** `init` と `up` は再バインドを行いません。`init` は「terminal または名前だけが変わった候補」を検出すると `明示的な rebind --team <id> が必要な可能性` を案内するだけで、
 stale にせず状態も書き込みません。`status` は読み取り専用で、記録された pane に基づいて観測し、`binding=bound|candidate|unverified` を出力して、ライフサイクルの `status` とバインドの有効性を区別します。`bound` は現在のタスク名が記録されたロール名と一致することも要求し、他者の名前や空の場合は最大でも `unverified` です。`candidate` は候補（同じ pane と kind で terminal または名前が変化）にすぎず、`rebind` がプリフライトを通過する保証はないため、まず `--preflight` で確認してください。
@@ -233,7 +259,7 @@ go build -trimpath -o bin/nakama ./cmd/nakama
 
 ## 未対応
 
-popup / TUI、`startup` / `events`、`add` / `drop` / `swap` / `sync`、古いチームの引き継ぎ、CI。
+popup / TUI、`startup` / `events`、複数 Worker の並行、Owner の交代、`sync`、古いチームの引き継ぎ、CI。
 
 ## 謝辞
 

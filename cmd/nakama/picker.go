@@ -72,10 +72,12 @@ func aliasLines(cfg *config, role string) []string {
 
 // 逐角色询问：回车取默认，简写与完整写法都行；解析校验复用 pickEngine/parseEngine。
 // 返回传给 cmdUp 的完整引擎串（advisor 为 none 时返回 "none"）。
-func (a *app) askEngine(cfg *config, role, label string, allowNone bool) (string, error) {
-	def := ""
-	if raw := cfg.profileStr(role); raw != "" {
-		def = cfg.resolveEngine(raw, role)
+// def 非空时覆盖 profile 默认（替换角色时默认沿用原引擎）。
+func (a *app) askEngine(cfg *config, role, label string, allowNone bool, def string) (string, error) {
+	if raw := cfg.profileStr(role); def == "" && raw != "" {
+		if d := cfg.resolveEngine(raw, role); allowNone || d != "none" {
+			def = d
+		}
 	}
 	a.outf(L("\n%s 可用简写：\n"), label)
 	for _, l := range aliasLines(cfg, role) {
@@ -141,32 +143,30 @@ func (a *app) cmdPick(args []string) error {
 	if err != nil {
 		return a.pickReject("%v", err)
 	}
-	if id := a.st.findByAnchor(a.anchor.PaneID); id != "" {
-		t, err := a.st.load(id)
-		if err != nil {
-			return a.pickReject("%v", err)
+	// 锚点或任一角色 pane 已属于某个编组：进入管理菜单，不新建。
+	id := a.st.findByAnchor(a.anchor.PaneID)
+	if id == "" {
+		switch ids := a.st.findByPane(a.anchor.PaneID); {
+		case len(ids) == 1:
+			id = ids[0]
+		case len(ids) > 1:
+			return a.pickReject(L("当前 pane 同时属于多个编组（%s），请用 --team 指定。"), strings.Join(ids, ", "))
 		}
-		a.outf(L("\n锚点 pane %s 已有编组 %s（phase=%s）：\n"), a.anchor.PaneID, id, t.Phase)
-		for _, rn := range roleOrder {
-			if r := t.role(rn); r != nil {
-				a.outf("  %-7s %s\n", rn, r.Engine)
-			}
-		}
-		a.outf("%s", L("不能在原锚点换模型；如需新模型请在新 pane 建组。半组恢复请用 up action。\n"))
-		a.waitEnter()
-		return nil
+	}
+	if id != "" {
+		return a.teamMenu(cfg, id)
 	}
 	a.outf(L("锚点 pane %s\n"), a.anchor.PaneID)
 
-	owner, err := a.askEngine(cfg, "owner", "Owner", false)
+	owner, err := a.askEngine(cfg, "owner", "Owner", false, "")
 	if err != nil {
 		return err
 	}
-	worker, err := a.askEngine(cfg, "worker", "Worker", false)
+	worker, err := a.askEngine(cfg, "worker", "Worker", false, "")
 	if err != nil {
 		return err
 	}
-	advisor, err := a.askEngine(cfg, "advisor", "Advisor", true)
+	advisor, err := a.askEngine(cfg, "advisor", "Advisor", true, "")
 	if err != nil {
 		return err
 	}
@@ -180,11 +180,17 @@ func (a *app) cmdPick(args []string) error {
 		return nil
 	}
 
-	// 执行期间才启用 stop-flag 语义；输入阶段让默认信号处理直接终止进程。
-	// watcher 要覆盖到锁释放之后，否则信号落在两者之间会绕过 defer 遗留锁。
 	a.createOnly = true
+	return a.guarded(func() error {
+		return a.cmdUp([]string{"--owner", owner, "--worker", worker, "--advisor", advisor, "--pane", a.anchor.PaneID, "--cwd", a.anchor.CWD})
+	}, L("\n建组完成。\n"), L("\n建组失败，见上方信息。\n"))
+}
+
+// overlay 内执行有副作用的命令：执行期间才启用 stop-flag 语义；输入阶段让默认信号处理直接终止进程。
+// watcher 要覆盖到锁释放之后，否则信号落在两者之间会绕过 defer 遗留锁。
+func (a *app) guarded(run func() error, okMsg, failMsg string) error {
 	stop := a.watchSignals()
-	runErr := a.cmdUp([]string{"--owner", owner, "--worker", worker, "--advisor", advisor, "--pane", a.anchor.PaneID, "--cwd", a.anchor.CWD})
+	runErr := run()
 	if a.beforeUnlock != nil {
 		a.beforeUnlock()
 	}
@@ -195,10 +201,88 @@ func (a *app) cmdPick(args []string) error {
 		return a.fail(L("被信号中断：已完成的结果已落盘。"))
 	}
 	if runErr == nil {
-		a.outf("%s", L("\n建组完成。\n"))
+		a.outf("%s", okMsg)
 	} else {
-		a.outf("%s", L("\n建组失败，见上方信息。\n"))
+		a.outf("%s", failMsg)
 	}
 	a.waitEnter()
 	return runErr
+}
+
+// 已有编组的管理菜单：增减 Advisor、替换 Worker / Advisor、清理任务目录。引擎仍在创建时冻结，换模型即替换实例。
+func (a *app) teamMenu(cfg *config, id string) error {
+	t, err := a.st.load(id)
+	if err != nil {
+		return a.pickReject("%v", err)
+	}
+	a.outf(L("\n编组 %s（phase=%s，锚点 pane %s）：\n"), id, t.Phase, t.Anchor.PaneID)
+	for _, rn := range roleOrder {
+		if r := t.role(rn); r != nil {
+			a.outf("  %-7s %s\n", rn, r.Engine)
+		}
+	}
+	a.outf("\n")
+	if t.hasAdvisor() {
+		a.outf("%s", L("  x  移除 Advisor\n  v  替换 Advisor\n"))
+	} else {
+		a.outf("%s", L("  a  添加 Advisor\n"))
+	}
+	a.outf("%s", L("  w  替换 Worker（旧 pane 保留，请先确认它已停止写入）\n  c  清理任务目录\n选择 [回车关闭]: "))
+	in, err := a.readLine()
+	if err != nil {
+		return a.fail(L("输入结束，已取消（未创建任何内容）。"))
+	}
+	var run func() error
+	role, label := "", ""
+	switch strings.ToLower(in) {
+	case "":
+		return nil
+	case "c":
+		return a.guarded(func() error { return a.cmdClean([]string{"--team", id}) }, "", "")
+	case "x":
+		if !t.hasAdvisor() {
+			return a.pickReject(L("未知选项：%s"), in)
+		}
+		run = func() error { return a.cmdDrop([]string{"--team", id}) }
+	case "a":
+		if t.hasAdvisor() {
+			return a.pickReject(L("未知选项：%s"), in)
+		}
+		role, label = "advisor", "Advisor"
+	case "v":
+		if !t.hasAdvisor() {
+			return a.pickReject(L("未知选项：%s"), in)
+		}
+		role, label = "advisor", "Advisor"
+	case "w":
+		role, label = "worker", "Worker"
+	default:
+		return a.pickReject(L("未知选项：%s"), in)
+	}
+	summary := L("移除 Advisor")
+	if role != "" {
+		def := ""
+		if r := t.role(role); r != nil {
+			def = r.Engine
+		}
+		eng, err := a.askEngine(cfg, role, label, false, def)
+		if err != nil {
+			return err
+		}
+		summary = label + " → " + eng
+		run = func() error { return a.cmdSwap([]string{"--team", id, "--role", role, "--engine", eng}) }
+		if t.role(role) == nil {
+			run = func() error { return a.cmdAdd([]string{"--team", id, "--engine", eng}) }
+		}
+	}
+	a.outf(L("\n将变更编组 %s：%s\n确认？[y/N] "), id, summary)
+	ans, err := a.readLine()
+	if err != nil {
+		return a.fail(L("输入结束，已取消（未创建任何内容）。"))
+	}
+	if l := strings.ToLower(ans); l != "y" && l != "yes" {
+		a.outf("%s", L("已取消。\n"))
+		return nil
+	}
+	return a.guarded(run, L("\n编组变更已执行。\n"), L("\n编组变更未完成，见上方信息。\n"))
 }

@@ -4,9 +4,9 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 A **native [Herdr](https://herdr.dev) plugin** that creates, initializes and restores three-role coding-agent teams (Owner / Worker / Advisor). Written in Go using only the standard library.
 
-https://github.com/user-attachments/assets/4b663eaa-346a-43d5-8933-d254a7285315
+https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702
 
-▶ 85-second usage video · [中文版](https://github.com/user-attachments/assets/25ce3f28-7fe1-4619-8731-c8773cf14a4f) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
+▶ 97-second usage video · [中文版](https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
 
 ## Nakama at a glance
 
@@ -54,7 +54,7 @@ command = "forsakesoul.nakama.init"
 description = "nakama: init (initialize the team of the current anchor)"
 ```
 
-Press `prefix+u` in the target pane to open the engine picker (overlay): choose Owner / Worker / Advisor in turn (Enter takes the default; you may type an `engine_map` shorthand or a full `<launcher>/<model>[:effort]`; Advisor accepts `none`). After you confirm the summary, a team is created anchored at the pane that was focused when you pressed the key. `Ctrl-C` cancels (nothing is created before confirmation). If the anchor already has a team, the picker only shows the existing team and each role's frozen engine — you cannot switch models on the same anchor; create a new team in a new pane instead. The picker only creates: if any team (including a half-built one) appears on that pane while you are confirming, it refuses — no recovery, no takeover. A signal received during creation lets the in-flight operation persist, then exits non-zero instead of staying on the result page. Once the agents are up, press `prefix+i` to initialize; inspect results with `herdr plugin action invoke status --plugin forsakesoul.nakama` or `herdr plugin log list --plugin forsakesoul.nakama`.
+Press `prefix+u` in the target pane to open the engine picker (overlay): choose Owner / Worker / Advisor in turn (Enter takes the default; you may type an `engine_map` shorthand or a full `<launcher>/<model>[:effort]`; Advisor accepts `none`). After you confirm the summary, a team is created anchored at the pane that was focused when you pressed the key. `Ctrl-C` cancels (nothing is created before confirmation). When the pane is a team's anchor or one of its role panes, the picker shows that team's management menu instead (add or remove the Advisor, replace the Worker / Advisor, clean task directories — see "Changing roles mid-task"). The engine of an instance on the team stays frozen; changing the model means replacing the instance. The creation flow only creates: if any team (including a half-built one) appears on that pane while you are confirming, it refuses — no recovery, no takeover. A signal received during creation lets the in-flight operation persist, then exits non-zero instead of staying on the result page. Once the agents are up, press `prefix+i` to initialize; inspect results with `herdr plugin action invoke status --plugin forsakesoul.nakama` or `herdr plugin log list --plugin forsakesoul.nakama`.
 
 > The `up` action keeps its original behavior (create a team from `default_profile`, or pass `--owner/--worker/--advisor` on the CLI) and is also used to resume half-built teams. `herdr plugin action invoke up/init/pick` from a shell does not carry the caller's pane and uses the pane currently focused in the UI as the anchor, so trigger `pick` / `up` / `init` via key bindings (or while the target pane has focus).
 
@@ -125,7 +125,7 @@ Merge `engine_map.claude` from `config.example.json` into the Herdr plugin confi
 
 This optional preset leaves existing role defaults and private config untouched. `cc` remains Opus 5.5 / medium; the Worker resolves to `cc/haiku:medium`. The `haiku` alias follows local Claude Code, so check the actual model and effort after launch. Enter `none` for Advisor without independent review. For a known harder task, enter `cc/sonnet:medium` or `cc/opus:medium` for Worker. `ccenv` still rejects effort; verify gateway and Pi models, parameters and availability against the actual provider.
 
-Follow the [shared protocol's Claude rules](prompts/en/protocol.md) for failure verification, model escalation and adjustment authorization. Existing teams keep their frozen engines; when adjustment is needed, hand off at a safe stop and create a team in a new pane under that protocol.
+Follow the [shared protocol's Claude rules](prompts/en/protocol.md) for failure verification, model escalation and adjustment authorization. Instances on a team keep their frozen engines; when adjustment is needed, hand off at a safe stop and replace that role instance (see "Changing roles mid-task"), or create a team in a new pane under that protocol.
 
 Changing shared protocol content changes `protocol_version` for that language. If an old team's hash does not match at initialization, create a new team rather than rewriting state to bypass the check. Existing role contexts are not refreshed automatically.
 
@@ -136,6 +136,10 @@ nakama up [--owner E] [--worker E] [--advisor E|none] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
 nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <role>=<session>]... [--confirm-anchor <terminal>]
+nakama add --team <id> [--engine E]
+nakama drop --team <id>
+nakama swap --team <id> --role worker|advisor [--engine E]
+nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 ```
 
 - New team names: `<project short name ≤8>_<12hex>`, or `task_` when no project matches. The suffix mixes a nanosecond timestamp with 6 bytes of cryptographic randomness and takes the first 6 bytes of its SHA-256, keeping a fixed format that external tools can recognize. Role names are `<prefix>_design/_execute/_advisor`, full name ≤32; existing teams keep their names.
@@ -143,7 +147,29 @@ nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <
 - Every Herdr call goes through `HERDR_BIN_PATH` (default `herdr`) with argv passed per argument — no eval, no shell concatenation.
 - `split` always passes `--pane/--cwd/--no-focus` explicitly.
 - If a role stops at an authorization/trust dialog after launch, `up` waits for you to approve it in that pane; each role's capture has a single wait limit `NAKAMA_START_WAIT_SECONDS` (default 600 s), and no input is sent while waiting.
-- The `init` anchor may be any role pane of a team: when a role pane is focused, the team is found by pane, and the caller is first verified to still be that team's role instance (read-only, refused before any prompt/rename). If multiple teams match, it errors and requires `--team`. `up`/`pick` still decide existing teams by the anchor pane only.
+- The `init` anchor may be any role pane of a team: when a role pane is focused, the team is found by pane, and the caller is first verified to still be that team's role instance (read-only, refused before any prompt/rename). If multiple teams match, it errors and requires `--team`. `up` still decides existing teams by the anchor pane only; `pick` opens the team's management menu from the anchor or any role pane.
+
+## Changing roles mid-task
+
+After a team is initialized you can add or remove the independent Advisor, and replace a stuck Worker or Advisor. The Owner cannot be replaced, and there is still only one Worker at a time.
+
+- **Entry point**: press `prefix+u` in the anchor or any role pane; for an existing team it shows a management menu (`a` add an Advisor, `x` remove it, `v` replace the Advisor, `w` replace the Worker, `c` clean task directories). Pick the engine and confirm. The CLI equivalents are `nakama add / drop / swap --team <id>`.
+- **Two steps**: `add` / `swap` only create the pane and launch the new instance. After checking its model and permissions, press `prefix+i`: `init` initializes the new role, then delivers one `[TEAM_UPDATE]` (the latest mapping plus that role's new division of work) to each other role on the team. `drop` has no new instance and delivers right away.
+- **Only idle roles are notified**: `[TEAM_UPDATE]` goes only to roles whose identity verifies and that are idle/done. A busy or dialog-blocked role keeps a pending flag (`status` shows `team_update=pending`); press `prefix+i` again once it is idle.
+- **Old instances**: a replaced or removed instance is recorded under `retired` in the state. Its pane is not closed or renamed and receives no further input from the plugin. Before replacing a Worker, make sure the old one has stopped writing, then deal with that pane yourself.
+- **Instance numbers are never reused**: new instances are `W2`, `A2`…, named `<prefix>_execute2`, `<prefix>_advisor2`…; the first instance keeps the original name.
+- **Preconditions**: the team is `initialized`, has no unconfirmed side effect and no unfinished rebind, and the hashes of `protocol.md` and the context file are unchanged. A team created before a protocol change cannot be changed; create a new team.
+- **Recovery**: if a change fails midway the team stays at `phase=changing` and `init` refuses; check, then rerun the same command or `up` to finish it.
+
+## Task directory and cleanup
+
+A newly created team has a task directory `<project dir>/.nakama/<team id>/`; its path is recorded in the state and written into every role's init prompt. `.nakama/.gitignore` contains `*`, so the whole directory stays out of `git status` and diffs.
+
+- **Purpose**: the Owner creates a `<task_id>/` subdirectory per business task; handoff packages, NOTICEs and the Advisor's conclusions are each written as one file (for example `op_x_h1.md`, `W1-003.md`, `A1-002.md`) and never modified afterwards. Prompts between roles carry only the message header and the file path; writing a file is not delivery, the NOTICE must still be sent. A role that joins or is replaced mid-task reads the latest handoff from here. See the [shared protocol](prompts/en/protocol.md) for the rules.
+- **No automatic cleanup**: finishing a task is not authorization to delete. The Owner reports the directory path once at delivery, and runs the cleanup command given in its prompt only after you explicitly say it may be deleted.
+- **Cleaning it yourself**: `c` in the management menu, or `nakama clean`. Without a selection it lists every task directory (file count, size, last modified) and, in a terminal, lets you pick by number and confirm; `--team <id> --task <task_id>` or `--all` select directly, and a non-interactive run needs `--yes`.
+- **Safeguards**: only direct subdirectories of the task directory recorded in the state are deleted, and symlinks are not followed; while that team's Worker or Advisor (including replaced instances) is working/blocked, or its state cannot be confirmed, it refuses by default, and deletes only with `--force`. Whether requests are settled is judged by the Owner under the protocol; the plugin cannot know.
+- **Older teams**: teams created before this version have no task directory and keep inlining message bodies.
 
 ## State and safety
 
@@ -195,8 +221,8 @@ Before execution and before commit the whole team is re-verified: stable-team co
 **Racing with Bridge.** Herdr's rename has no compare-and-swap semantics, so Bridge auto-naming between read and rename cannot be ruled out mathematically.
 On detected drift it stops and keeps the plan; the plugin does not chase or modify Bridge. Success does not mean the name never changes; later `init` / `prompt` still apply strict checks.
 
-**State compatibility.** This version writes `schema_version: 2`, adding `rebind_pending` and `rebinds` (audit). Older versions only accept schema 1 and refuse 2,
-so state is never overwritten with new fields lost; to go back to an older version, first make sure no plan is pending and handle the state file yourself. Schema 1 can still be read and is upgraded to 2 on save.
+**State compatibility.** This version writes `schema_version: 3`: schema 2 added `rebind_pending` and `rebinds` (audit), schema 3 adds `task_dir`, `retired` and the per-role `team_update_pending`. Older versions refuse any higher schema,
+so state is never overwritten with new fields lost; to go back to an older version, first make sure no plan is pending and handle the state file yourself. Schemas 1 and 2 can still be read and are upgraded to 3 on save.
 
 **Never automatic.** `init` and `up` never rebind; when `init` detects a "candidate with only terminal or name changes" it only hints that `an explicit rebind --team <id> may be needed`,
 without marking stale or writing state. `status` is read-only, observes by recorded pane, prints `binding=bound|candidate|unverified`, and distinguishes the lifecycle `status` from whether the binding is valid. `bound` also requires the current task name to equal the recorded role name; a foreign or empty name gives at most `unverified`. `candidate` is only a candidate (same pane and kind, terminal or name changed) and does not guarantee `rebind` passes preflight — check with `--preflight` first.
@@ -233,7 +259,7 @@ The fixtures `tests/fixtures/agent_get.json` / `pane_get_shell.json` come from r
 
 ## Not yet supported
 
-popup / TUI, `startup` / `events`, `add` / `drop` / `swap` / `sync`, taking over old teams, CI.
+popup / TUI, `startup` / `events`, several Workers in parallel, replacing the Owner, `sync`, taking over old teams, CI.
 
 ## Acknowledgements
 

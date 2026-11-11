@@ -12,11 +12,15 @@ import (
 )
 
 // 状态：<STATE_DIR>/teams/<safe-id>.json。只解析不执行；同目录临时文件 + rename 原子替换；目录 0700、文件 0600。
-// schema 2 增加 rebind 计划与审计。旧二进制只接受 schema 1，读到 2 即拒绝，因此不会在丢失新字段的情况下覆盖状态。
-const schemaVersion = 2
+// schema 2 增加 rebind 计划与审计；schema 3 增加任务目录、停用角色记录与 TEAM_UPDATE 待投递标记。
+// 旧二进制读到更高的 schema 即拒绝，因此不会在丢失新字段的情况下覆盖状态。
+const schemaVersion = 3
 
-// schemaVersionV1 仍可读取；由本版本保存时升级为 schemaVersion。
-const schemaVersionV1 = 1
+// 旧 schema 仍可读取；由本版本保存时升级为 schemaVersion。
+const (
+	schemaVersionV1 = 1
+	schemaVersionV2 = 2
+)
 
 // Ident 与 Bridge identOf 同字段：terminal|pane|kind|session。身份比较只走 sameIdent。
 type Ident struct {
@@ -52,6 +56,7 @@ type Role struct {
 	Launched       bool    `json:"launched"`
 	Inited         bool    `json:"inited"`
 	Stale          bool    `json:"stale,omitempty"`
+	TeamUpdate     bool    `json:"team_update_pending,omitempty"` // 编组变更后尚未向该角色投递 [TEAM_UPDATE]
 	PaneTerminal   string  `json:"pane_terminal,omitempty"`
 	LaunchIdentity *Ident  `json:"launch_identity"`
 	Identity       *Ident  `json:"identity"`
@@ -100,6 +105,19 @@ type Team struct {
 	Pending         *Pending       `json:"pending"`
 	RebindPending   *RebindPlan    `json:"rebind_pending,omitempty"`
 	Rebinds         []RebindRecord `json:"rebinds,omitempty"`
+	TaskDir         string         `json:"task_dir,omitempty"`
+	Retired         []RetiredRole  `json:"retired,omitempty"`
+}
+
+// RetiredRole：被移除或替换的角色实例。实例号不复用（请求号 req 含实例号），pane 保留给用户处理。
+type RetiredRole struct {
+	Role     string `json:"role"`
+	Name     string `json:"name"`
+	Pane     string `json:"pane"`
+	Engine   string `json:"engine"`
+	Instance int    `json:"instance"`
+	At       string `json:"at"`
+	Op       string `json:"op"` // drop | swap
 }
 
 // RebindStep：重绑计划中的一个角色。Old 是记录身份，New 是预检时观测到的身份（用户确认的对象）。
@@ -156,6 +174,39 @@ func (t *Team) role(name string) *Role {
 }
 
 func (t *Team) hasAdvisor() bool { return t.Roles.Advisor != nil }
+
+func (t *Team) setRole(name string, r *Role) {
+	switch name {
+	case "worker":
+		t.Roles.Worker = r
+	case "advisor":
+		t.Roles.Advisor = r
+	}
+}
+
+var roleSuffix = map[string]string{"owner": "_design", "worker": "_execute", "advisor": "_advisor"}
+
+// 角色名唯一生成点：首个实例沿用原名，替换/重加的实例追加实例号（旧实例仍占用原名）。
+func roleName(prefix, role string, instance int) string {
+	if instance <= 1 {
+		return prefix + roleSuffix[role]
+	}
+	return fmt.Sprintf("%s%s%d", prefix, roleSuffix[role], instance)
+}
+
+// 下一个实例号：高于当前与所有已停用实例。
+func (t *Team) nextInstance(role string) int {
+	n := 0
+	if r := t.role(role); r != nil {
+		n = r.Instance
+	}
+	for _, x := range t.Retired {
+		if x.Role == role && x.Instance > n {
+			n = x.Instance
+		}
+	}
+	return n + 1
+}
 
 func (t *Team) setPending(role, step, delivery string) {
 	t.Pending = &Pending{OpID: fmt.Sprint(time.Now().UnixNano()), Role: role, Step: step, Delivery: delivery}
@@ -280,7 +331,7 @@ func (s store) save(t *Team) error {
 	if err := mkdirSecure(s.teamsDir()); err != nil {
 		return err
 	}
-	// 本版本写出的状态一律为 schema 2；旧版本读到 2 即拒绝，不会丢字段地覆盖。
+	// 本版本写出的状态一律为当前 schema；旧版本读到更高 schema 即拒绝，不会丢字段地覆盖。
 	t.SchemaVersion = schemaVersion
 	b, err := json.MarshalIndent(t, "", "  ")
 	if err != nil {
@@ -388,8 +439,28 @@ func validateTeam(raw []byte) error {
 		return bad
 	}
 	v, ok := t["schema_version"].(float64)
-	if !ok || (v != schemaVersionV1 && v != schemaVersion) {
+	if !ok || (v != schemaVersionV1 && v != schemaVersionV2 && v != schemaVersion) {
 		return bad
+	}
+	// 低版本 schema 不得携带更高版本才有的字段：出现即视为损坏，而不是静默忽略。
+	if v < schemaVersion && (t["task_dir"] != nil || t["retired"] != nil) {
+		return bad
+	}
+	if td, has := t["task_dir"]; has && td != nil && !nonEmptyStr(td) {
+		return bad
+	}
+	if rt, has := t["retired"]; has && rt != nil {
+		list, isList := rt.([]any)
+		if !isList {
+			return bad
+		}
+		for _, x := range list {
+			m, isObj := x.(map[string]any)
+			inst, isNum := m["instance"].(float64)
+			if !isObj || !isNum || inst < 1 || !nonEmptyStr(m["name"]) || (m["role"] != "worker" && m["role"] != "advisor") {
+				return bad
+			}
+		}
 	}
 	// schema 1 不得携带 rebind 字段：旧状态里出现它们视为损坏，而不是静默忽略。
 	if v == schemaVersionV1 && (t["rebind_pending"] != nil || t["rebinds"] != nil) {
@@ -420,32 +491,36 @@ func validateTeam(raw []byte) error {
 	}
 	phase, _ := t["phase"].(string)
 	switch phase {
-	case "starting", "panes_ready", "launched", "initialized":
+	case "starting", "panes_ready", "launched", "initialized", "changing":
 	default:
+		return bad
+	}
+	if v < schemaVersion && phase == "changing" {
 		return bad
 	}
 	roles, ok := t["roles"].(map[string]any)
 	if !ok {
 		return bad
 	}
-	for _, c := range [][2]string{{"owner", "_design"}, {"worker", "_execute"}, {"advisor", "_advisor"}} {
-		r, isObj := roles[c[0]].(map[string]any)
+	for _, rn := range roleOrder {
+		r, isObj := roles[rn].(map[string]any)
 		if !isObj {
-			if roles[c[0]] == nil && c[0] == "advisor" {
+			if roles[rn] == nil && rn == "advisor" {
 				continue
 			}
 			return bad
 		}
-		if r["name"] != prefix+c[1] {
+		inst, _ := r["instance"].(float64)
+		if r["name"] != roleName(prefix, rn, int(inst)) {
 			return bad
 		}
 	}
-	for _, rv := range roles {
+	for rn, rv := range roles {
 		if rv == nil {
 			continue
 		}
 		r, ok := rv.(map[string]any)
-		if !ok {
+		if !ok || (v < schemaVersion && r["team_update_pending"] != nil) {
 			return bad
 		}
 		inst, isNum := r["instance"].(float64)
@@ -458,7 +533,8 @@ func validateTeam(raw []byte) error {
 		if pane != nil && !nonEmptyStr(pane) {
 			return bad
 		}
-		if phase != "starting" && pane == nil {
+		// changing 只允许被新增/替换的 Worker / Advisor 尚无 pane；Owner 不可变更。
+		if pane == nil && phase != "starting" && (phase != "changing" || rn == "owner") {
 			return bad
 		}
 		if r["inited"] == true && r["identity"] == nil {
