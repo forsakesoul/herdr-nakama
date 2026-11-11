@@ -28,9 +28,9 @@ func rebindSetup(t *testing.T, withWorkerSession, anchorIdentity bool) (*tenv, s
 	e.mustRun("up")
 	id := e.teamID()
 	e.mustRun("init", "--team", id)
-	e.rowSet(e.str("roles", "owner", "name"), e.str("roles", "owner", "pane"), e.str("roles", "owner", "identity", "terminal_id"), "codex", "sess-owner")
+	e.rowSet(e.str("roles", "O1", "name"), e.str("roles", "O1", "pane"), e.str("roles", "O1", "identity", "terminal_id"), "codex", "sess-owner")
 	if withWorkerSession {
-		e.rowSet(e.str("roles", "worker", "name"), e.str("roles", "worker", "pane"), e.str("roles", "worker", "identity", "terminal_id"), "pi", "sess-worker")
+		e.rowSet(e.str("roles", "W1", "name"), e.str("roles", "W1", "pane"), e.str("roles", "W1", "identity", "terminal_id"), "pi", "sess-worker")
 	}
 	e.mustRun("init", "--team", id)
 	if anchorIdentity {
@@ -50,7 +50,7 @@ type restartOpt struct {
 // 锚点 terminal 由调用方另行通过 FAKE_ANCHOR_TERM 设置。
 func restart(e *tenv, o restartOpt) {
 	cwd := e.str("cwd")
-	for _, rn := range []string{"owner", "worker"} {
+	for _, rn := range []string{"O1", "W1"} {
 		if o.skip[rn] {
 			continue
 		}
@@ -132,9 +132,9 @@ func rowKeyFor(rows []nameRow, pane string) string {
 
 func TestRebindRestartedStableTeam(t *testing.T) {
 	e, id := rebindSetup(t, true, false)
-	ownerPane, workerPane := e.str("roles", "owner", "pane"), e.str("roles", "worker", "pane")
-	ownerName, workerName := e.str("roles", "owner", "name"), e.str("roles", "worker", "name")
-	origOwnerTerm := e.str("roles", "owner", "identity", "terminal_id")
+	ownerPane, workerPane := e.str("roles", "O1", "pane"), e.str("roles", "W1", "pane")
+	ownerName, workerName := e.str("roles", "O1", "name"), e.str("roles", "W1", "name")
+	origOwnerTerm := e.str("roles", "O1", "identity", "terminal_id")
 	restart(e, restartOpt{})
 	t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
 	before := readState(t, e)
@@ -150,12 +150,12 @@ func TestRebindRestartedStableTeam(t *testing.T) {
 
 	e.mustRun("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
 	eq(t, e.count("agent", "rename")-renames, 2, "两角色各 rename 一次")
-	eq(t, e.str("roles", "owner", "identity", "terminal_id"), "term_new_"+ownerPane, "owner identity 已更新")
-	eq(t, e.str("roles", "worker", "identity", "terminal_id"), "term_new_"+workerPane, "worker identity 已更新")
-	eq(t, e.str("roles", "owner", "launch_identity", "terminal_id"), origOwnerTerm, "launch_identity 保留历史")
+	eq(t, e.str("roles", "O1", "identity", "terminal_id"), "term_new_"+ownerPane, "owner identity 已更新")
+	eq(t, e.str("roles", "W1", "identity", "terminal_id"), "term_new_"+workerPane, "worker identity 已更新")
+	eq(t, e.str("roles", "O1", "launch_identity", "terminal_id"), origOwnerTerm, "launch_identity 保留历史")
 	eq(t, e.str("anchor", "terminal_id"), "term_new_anchor", "锚点 terminal 已更新")
 	eq(t, e.str("team_rev"), "2", "提交后 team_rev+1")
-	eq(t, e.str("schema_version"), "3", "写出当前 schema")
+	eq(t, e.str("schema_version"), "4", "写出当前 schema")
 	eq(t, e.str("rebind_pending"), "<nil>", "计划已清除")
 	eq(t, stateAt(e, "rebinds", 0, "result"), "committed", "审计记录 committed")
 	eq(t, stateAt(e, "rebinds", 0, "anchor_new_terminal"), "term_new_anchor", "审计记录锚点新值")
@@ -182,7 +182,7 @@ func TestRebindRenameModes(t *testing.T) {
 			e, id := rebindSetup(t, true, false)
 			restart(e, restartOpt{auto: auto})
 			e.mustRun("rebind", "--team", id)
-			eq(t, e.str("roles", "owner", "identity", "terminal_id"), "term_new_"+e.str("roles", "owner", "pane"), "owner 已绑定")
+			eq(t, e.str("roles", "O1", "identity", "terminal_id"), "term_new_"+e.str("roles", "O1", "pane"), "owner 已绑定")
 			has(t, e.mustRun("status", "--team", id), "binding=bound", "绑定有效")
 		})
 	}
@@ -201,9 +201,9 @@ func TestRebindRefusalsWriteNothing(t *testing.T) {
 			e.rowSet("other-name", p, "term_new_"+p, "codex", "sess-owner")
 		}, nil, "当前名称"},
 		"目标任务名被其它 pane 占用": {true, restartOpt{}, func(e *tenv, _, _ string) {
-			e.rowSet(e.str("roles", "owner", "name"), "w0:p99", "term_x", "claude", "")
+			e.rowSet(e.str("roles", "O1", "name"), "w0:p99", "term_x", "claude", "")
 		}, nil, "已被其它 pane 占用"},
-		"session 不一致": {true, restartOpt{sessions: map[string]string{"owner": "sess-other"}}, func(*tenv, string, string) {}, nil, "session 不一致"},
+		"session 不一致": {true, restartOpt{sessions: map[string]string{"O1": "sess-other"}}, func(*tenv, string, string) {}, nil, "session 不一致"},
 		"kind 变化": {true, restartOpt{}, func(e *tenv, p, _ string) {
 			e.rowDel("@" + p)
 			e.rowSet("@"+p, p, "term_new_"+p, "claude", "sess-owner")
@@ -212,14 +212,14 @@ func TestRebindRefusalsWriteNothing(t *testing.T) {
 			e.rowDel("@" + p)
 		}, nil, "无法观测"},
 		"记录 session 非空时确认值不一致": {true, restartOpt{}, func(*tenv, string, string) {}, []string{"--confirm-session", "owner=sess-wrong"}, "不一致"},
-		"确认值与观测不一致":            {false, restartOpt{sessions: map[string]string{"worker": "sess-worker"}}, func(*tenv, string, string) {}, []string{"--confirm-session", "worker=sess-wrong"}, "不一致"},
+		"确认值与观测不一致":            {false, restartOpt{sessions: map[string]string{"W1": "sess-worker"}}, func(*tenv, string, string) {}, []string{"--confirm-session", "worker=sess-wrong"}, "不一致"},
 		"确认参数指向不存在的角色":         {true, restartOpt{}, func(*tenv, string, string) {}, []string{"--confirm-session", "advisor=sess-x"}, "未被使用"},
 		"锚点确认值不一致":             {true, restartOpt{}, func(*tenv, string, string) {}, []string{"--confirm-anchor", "term_wrong"}, "不一致"},
 		"工作区上下文不一致": {true, restartOpt{}, func(e *tenv, _, _ string) {
 			e.stateSet(func(m map[string]any) { m["anchor"].(map[string]any)["workspace_id"] = "w9" })
 		}, nil, "workspace/tab/cwd 与编组记录不一致"},
 		"部分角色不满足（worker kind 变化，owner 本可重绑）": {true, restartOpt{}, func(e *tenv, _, workerPane string) {
-			e.rowDel(e.str("roles", "worker", "name"))
+			e.rowDel(e.str("roles", "W1", "name"))
 			e.rowDel("@" + workerPane)
 			e.rowSet("@"+workerPane, workerPane, "term_new_"+workerPane, "claude", "sess-worker")
 		}, nil, "kind 变化"},
@@ -229,7 +229,7 @@ func TestRebindRefusalsWriteNothing(t *testing.T) {
 			e, id := rebindSetup(t, c.withWorkerSession, false)
 			restart(e, c.restart)
 			t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-			c.mutate(e, e.str("roles", "owner", "pane"), e.str("roles", "worker", "pane"))
+			c.mutate(e, e.str("roles", "O1", "pane"), e.str("roles", "W1", "pane"))
 			before, renames := readState(t, e), e.count("agent", "rename")
 			args := append([]string{"rebind", "--team", id}, c.extra...)
 			if !containsArg(c.extra, "--confirm-anchor") {
@@ -257,7 +257,7 @@ func containsArg(args []string, want string) bool {
 
 func TestRebindRequiresSessionConfirmation(t *testing.T) {
 	e, id := rebindSetup(t, false, false) // worker 记录 session 为空
-	restart(e, restartOpt{sessions: map[string]string{"worker": "sess-worker"}})
+	restart(e, restartOpt{sessions: map[string]string{"W1": "sess-worker"}})
 	t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
 	before, renames := readState(t, e), e.count("agent", "rename")
 
@@ -265,13 +265,13 @@ func TestRebindRequiresSessionConfirmation(t *testing.T) {
 	if ok {
 		t.Fatalf("记录 session 为空，缺确认应拒绝：\n%s", out)
 	}
-	has(t, out, "--confirm-session worker=sess-worker", "输出精确确认参数")
+	has(t, out, "--confirm-session W1=sess-worker", "输出精确确认参数")
 	eq(t, string(readState(t, e)), string(before), "零状态写入")
 	eq(t, e.count("agent", "rename"), renames, "零 rename")
 
 	e.mustRun("rebind", "--team", id, "--confirm-anchor", "term_new_anchor", "--confirm-session", "worker=sess-worker")
-	eq(t, e.str("roles", "worker", "identity", "session"), "sess-worker", "确认后 session 写入 identity")
-	eq(t, e.str("roles", "worker", "launch_identity", "session"), "", "launch_identity 历史不变")
+	eq(t, e.str("roles", "W1", "identity", "session"), "sess-worker", "确认后 session 写入 identity")
+	eq(t, e.str("roles", "W1", "launch_identity", "session"), "", "launch_identity 历史不变")
 }
 
 func TestRebindAnchorWithIdentity(t *testing.T) {
@@ -290,11 +290,11 @@ func TestRebindAnchorWithIdentity(t *testing.T) {
 
 func TestRebindMixedTerminalChanges(t *testing.T) {
 	e, id := rebindSetup(t, true, false)
-	restart(e, restartOpt{skip: map[string]bool{"worker": true}})
+	restart(e, restartOpt{skip: map[string]bool{"W1": true}})
 	ownerRenames := e.count("agent", "rename")
 	e.mustRun("rebind", "--team", id)
 	eq(t, e.count("agent", "rename")-ownerRenames, 1, "只有 owner 需要改名")
-	eq(t, e.str("roles", "worker", "identity", "terminal_id"), "term_"+e.str("roles", "worker", "pane"), "未变化的 worker 保持原 identity")
+	eq(t, e.str("roles", "W1", "identity", "terminal_id"), "term_"+e.str("roles", "W1", "pane"), "未变化的 worker 保持原 identity")
 	eq(t, e.str("team_rev"), "2", "混合变化仍提交一次")
 }
 
@@ -313,15 +313,15 @@ func TestRebindRefusesUnstableStates(t *testing.T) {
 	cases := map[string]func(e *tenv){
 		"phase 非 initialized": func(e *tenv) { e.stateSet(func(m map[string]any) { m["phase"] = "launched" }) },
 		"已 stale": func(e *tenv) {
-			e.stateSet(func(m map[string]any) { dig(m, "roles", "owner").(map[string]any)["stale"] = true })
+			e.stateSet(func(m map[string]any) { dig(m, "roles", "O1").(map[string]any)["stale"] = true })
 		},
 		"存在 pending": func(e *tenv) {
 			e.stateSet(func(m map[string]any) {
-				m["pending"] = map[string]any{"op_id": "1", "role": "owner", "step": "prompt", "delivery": "UNKNOWN"}
+				m["pending"] = map[string]any{"op_id": "1", "role": "O1", "step": "prompt", "delivery": "UNKNOWN"}
 			})
 		},
 		"角色未初始化": func(e *tenv) {
-			e.stateSet(func(m map[string]any) { dig(m, "roles", "worker").(map[string]any)["inited"] = false })
+			e.stateSet(func(m map[string]any) { dig(m, "roles", "W1").(map[string]any)["inited"] = false })
 		},
 	}
 	for name, mutate := range cases {
@@ -345,7 +345,7 @@ func TestRebindPartialFailuresKeepPendingAndNeverBlindRollback(t *testing.T) {
 	// 两角色均需改名（Bridge 自动名），锚点已确认；每个子用例在失败点之后用无注入的命令对账。
 	prepare := func(t *testing.T) (*tenv, string, string) {
 		e, id := rebindSetup(t, true, false)
-		origOwnerTerm := e.str("roles", "owner", "identity", "terminal_id")
+		origOwnerTerm := e.str("roles", "O1", "identity", "terminal_id")
 		restart(e, restartOpt{auto: true})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
 		return e, id, origOwnerTerm
@@ -360,7 +360,7 @@ func TestRebindPartialFailuresKeepPendingAndNeverBlindRollback(t *testing.T) {
 		}
 		eq(t, stateAt(e, "rebind_pending", "steps", 0, "result"), "done", "第一步已复核")
 		eq(t, stateAt(e, "rebind_pending", "steps", 1, "result"), "started", "第二步保留 started")
-		eq(t, e.str("roles", "owner", "identity", "terminal_id"), origOwnerTerm, "未提交前 identity 仍为记录值")
+		eq(t, e.str("roles", "O1", "identity", "terminal_id"), origOwnerTerm, "未提交前 identity 仍为记录值")
 		t.Setenv("NAKAMA_FAKE_RENAME_FAIL_AT", "")
 		e.mustRun("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
 		eq(t, e.count("agent", "rename")-base, 3, "owner 一次 + worker 失败一次 + 重跑一次")
@@ -383,7 +383,7 @@ func TestRebindPartialFailuresKeepPendingAndNeverBlindRollback(t *testing.T) {
 		e, id, _ := prepare(t)
 		hook := func(a *app) {
 			a.hookBeforeRename = func(role string) {
-				if role == "owner" {
+				if role == "O1" {
 					a.stop.Store(true)
 				}
 			}
@@ -398,7 +398,7 @@ func TestRebindPartialFailuresKeepPendingAndNeverBlindRollback(t *testing.T) {
 	})
 	t.Run("预检后到提交前身份漂移：不提交，discard 后按当前观测重新绑定", func(t *testing.T) {
 		e, id, origOwnerTerm := prepare(t)
-		ownerName, ownerPane := e.str("roles", "owner", "name"), e.str("roles", "owner", "pane")
+		ownerName, ownerPane := e.str("roles", "O1", "name"), e.str("roles", "O1", "pane")
 		hook := func(a *app) {
 			a.hookBeforeCommit = func() { e.rowSet(ownerName, ownerPane, "term_drift", "codex", "sess-owner") }
 		}
@@ -406,18 +406,18 @@ func TestRebindPartialFailuresKeepPendingAndNeverBlindRollback(t *testing.T) {
 		if err == nil {
 			t.Fatal("提交前漂移应拒绝提交")
 		}
-		eq(t, e.str("roles", "owner", "identity", "terminal_id"), origOwnerTerm, "漂移时 identity 不变")
+		eq(t, e.str("roles", "O1", "identity", "terminal_id"), origOwnerTerm, "漂移时 identity 不变")
 		e.mustRun("rebind", "--team", id, "--discard-pending")
 		eq(t, e.str("rebind_pending"), "<nil>", "计划已放弃")
 		e.mustRun("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
-		eq(t, e.str("roles", "owner", "identity", "terminal_id"), "term_drift", "按当前观测重新绑定")
+		eq(t, e.str("roles", "O1", "identity", "terminal_id"), "term_drift", "按当前观测重新绑定")
 	})
 	t.Run("Bridge 在途自动命名：rename 后复核失败，重跑时允许再次改回", func(t *testing.T) {
 		e, id, _ := prepare(t)
-		workerName, workerPane := e.str("roles", "worker", "name"), e.str("roles", "worker", "pane")
+		workerName, workerPane := e.str("roles", "W1", "name"), e.str("roles", "W1", "pane")
 		hook := func(a *app) {
 			a.hookAfterRename = func(role string) {
-				if role == "worker" {
+				if role == "W1" {
 					// 模拟 Bridge 在改名之后又自动命名：先删除该 pane 的既有行，避免同 pane 出现两行。
 					e.rowDel(workerName)
 					e.rowSet(bridgeAutoName(e.str("cwd"), "term_new_"+workerPane), workerPane, "term_new_"+workerPane, "pi", "sess-worker")
@@ -519,14 +519,19 @@ func TestRoleCandidateHintWithoutAnchorChange(t *testing.T) {
 func TestStateSchemaCompatibility(t *testing.T) {
 	t.Run("写出当前 schema", func(t *testing.T) {
 		e, _ := rebindSetup(t, true, false)
-		eq(t, e.str("schema_version"), "3", "新写出的状态为当前 schema")
+		eq(t, e.str("schema_version"), "4", "新写出的状态为当前 schema")
 	})
 	t.Run("schema 1 无 rebind 字段仍可读取，保存后升级", func(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
-		e.stateSet(func(m map[string]any) { m["schema_version"] = 1; delete(m, "rebinds"); delete(m, "task_dir") })
+		e.stateSet(func(m map[string]any) {
+			m["schema_version"] = 1
+			toLegacy(m)
+			delete(m, "rebinds")
+			delete(m, "task_dir")
+		})
 		e.mustRun("status", "--team", id)
 		e.mustRun("init", "--team", id)
-		eq(t, e.str("schema_version"), "3", "保存后升级")
+		eq(t, e.str("schema_version"), "4", "保存后升级")
 	})
 	t.Run("schema 1 携带 rebind 字段视为损坏", func(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
@@ -535,7 +540,7 @@ func TestStateSchemaCompatibility(t *testing.T) {
 	})
 	t.Run("未知 schema 拒绝", func(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
-		e.stateSet(func(m map[string]any) { m["schema_version"] = 4 })
+		e.stateSet(func(m map[string]any) { m["schema_version"] = 5 })
 		has(t, e.mustFail("status", "--team", id), "校验失败", "拒绝未知 schema")
 	})
 }

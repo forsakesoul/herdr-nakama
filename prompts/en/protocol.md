@@ -56,9 +56,9 @@ applies to every team and every role; the team only decides recipients and the r
 
 ### Message numbering
 
-- the task mapping above is the team binding; the Owner assigns a unique task_id per independent business request (the first may reuse the team ID; a reused team must get a new ID), ends the old task first and arranges initialization and handoff for a new session, and never re-runs team creation in an active team just for numbering. req=<task_id>/<role instance>-<sequence>, e.g. op_x/W2-003; role instances use O1/W1/A1 from the mapping, and the sequence increases monotonically from 000 within each task_id and instance — gaps are allowed, reuse is not.
+- the task mapping above is the team binding; the Owner assigns a unique task_id per independent business request (the first may reuse the team ID; a reused team must get a new ID), ends the old task first and arranges initialization and handoff for a new session, and never re-runs team creation in an active team just for numbering. req=<task_id>/<role instance>-<sequence>, e.g. op_x/W2-003; role instances use O1, W1/W2… and A1/A2… from the mapping (one team may have several Workers and Advisors), and the sequence increases monotonically from 000 within each task_id and instance — gaps are allowed, reuse is not.
 - New logical requests, synchronous answers and asynchronous results all use a new req; retries, re-deliveries and forwarded relays keep the original number and links and do not advance the business again.
-- The mapped instance changes only when a role is replaced; TEAM_UPDATE does not change the identity of surviving roles.
+- A new mapped instance is created only when a role is added or replaced; instance numbers increase per role and are never reused; TEAM_UPDATE does not change the identity of surviving roles.
 
 ### Short titles
 
@@ -191,6 +191,15 @@ applies to every team and every role; the team only decides recipients and the r
 - DONE means this round of execution has ended and file writes have stopped, not that all acceptance has passed; on BLOCKED stop affected writes and attach observed evidence, completed items and one question for the Owner to rule on; CONTEXT_READY means execution is paused for the Owner to consolidate context, writes have stopped and current tools have wound down, and the task is not finished.
 - All three states attach file scope, actual behavior, verification results, Gates not run, risks and the current diff.
 
+### Multiple Workers and multiple Advisors
+
+- When the mapping has several Workers, the Owner freezes a separate handoff package for each Worker with its own execution_request and reply state; handoff version numbers still increase within the task, and a new version for one Worker does not invalidate another Worker's valid version; the "currently valid version" is checked against the original request and its recipient.
+- Each Worker's write scope is non-overlapping by file or directory and is written in its handoff package; a Worker writes only its own frozen scope, stops writing on any overreach or scope conflict and refers it to the Owner; formatters and generators act only on the Worker's own scope and never stash, reset, checkout or clean up others' changes.
+- Git index/HEAD operations on the shared workspace (add, commit, branch switch, reset, etc.) are assigned by the Owner to one named executor and a serial window; other Workers do not touch the index/HEAD during that window. Before committing, after add, check that `git diff --cached --name-only` and the staged diff exactly match the approved set, and stop committing if this cannot be guaranteed. For stronger isolation, the Owner arranges a separate worktree for the specific task.
+- When several execution requests run in parallel, the Owner checks the merged diff once all related requests are DONE, then sends the final review; fixes go back to the originating Worker by scope.
+- With several Advisors, each design verification, local clarification or review request goes to exactly one Advisor, and may be split by dimension; the same Advisor is not sent requests concurrently. An Advisor handles only requests addressed to it.
+- Workers do not dispatch to each other; local questions go to an idle Advisor or the Owner. When relaying, choose any idle Advisor and deliver to one place only.
+
 ## Context and compaction
 
 ### Context policy
@@ -211,7 +220,7 @@ applies to every team and every role; the team only decides recipients and the r
 
 ### Duty preservation
 
-- the Owner saves a duty capsule in the frozen handoff and recovery packages, written from these elements: single writer, implement, test and self-review within the Owner's frozen scope, protect unrelated changes, plan conflicts go to the Owner, actually report per the communication protocol, keep commit/push/external-send authorization boundaries, never spawn Agents; plus the current valid task's authoritative seam, invariants, applicable rules, full acceptance criteria, completed/remaining items and the next action.
+- the Owner saves a duty capsule in the frozen handoff and recovery packages, written from these elements: single writer (with multiple Workers, the only writer within its own frozen scope), implement, test and self-review within the Owner's frozen scope, protect unrelated changes, plan conflicts go to the Owner, actually report per the communication protocol, keep commit/push/external-send authorization boundaries, never spawn Agents; plus the current valid task's authoritative seam, invariants, applicable rules, full acceptance criteria, completed/remaining items and the next action.
 - The capsule contains no initialization-wait instruction; a resume cannot just say "continue", and must not change models or role instances, reset request numbers, or turn the writer into the Owner/Advisor.
 - A Worker after native auto-compaction or active consolidation first verifies read-only the duty capsule, latest valid handoff, cancellation/invalidation records and workspace evidence after resuming; if any is missing, BLOCKED to gather evidence — never guess duties from a compaction summary or drop acceptance.
 - The capsule keeps the necessary rules and evidence locations without copying whole history logs; consolidation cannot replace implementation or claim the task is done.
@@ -236,7 +245,7 @@ applies to every team and every role; the team only decides recipients and the r
 
 - NOTICEs for execution, fixes or context stop points default to reply_to=Owner, and local asynchronous requests report to their attached reply_to.
 - Check the actual recipient per the delivery wait; only when the recipient is the Owner and working, and an independent Advisor is idle, may it go to the Advisor instead, marked "relay to Owner", never to both, keeping a relay record (actual name, instance, notice req, final recipient and delivery evidence); otherwise wait boundedly for the actual recipient.
-- The Worker remains the single writer; an Advisor's local verification request does not replace the Owner's frozen execution handoff and does not widen the change scope.
+- The Worker remains the single writer (with multiple Workers, limited to its own frozen write scope); an Advisor's local verification request does not replace the Owner's frozen execution handoff and does not widen the change scope.
 
 ### Independent Advisor relay
 
@@ -272,7 +281,7 @@ applies to every team and every role; the team only decides recipients and the r
 - Each role writes only files with its own instance prefix, writes a temporary file in the same directory and renames it, and never modifies a file afterwards; a revision uses a new request number or handoff version.
 - The prompt carries only the message header, status, correlation fields, a one-line summary and the file path, and no longer inlines the body.
 - Writing a file is not delivery: the message must still be actually delivered and its delivery recorded under the rules above, and the recipient has the complete result only after reading the complete file.
-- The task directory is not a project file and stays out of diffs, commits and review scope: the Advisor may write its own conclusion files and remains read-only for project files; the Worker remains the only writer of project code.
+- The task directory is not a project file and stays out of diffs, commits and review scope: the Advisor may write its own conclusion files and remains read-only for project files; the Worker remains the only writer of project code (within its own frozen scope).
 - Files contain no credentials, cookies, tokens or replayable links.
 - Catch-up reads, RESULT_REPLAY, recovery after compaction, and roles that join or are replaced mid-task read the latest valid files in that subdirectory first before asking other roles.
 - When the mapping gives no task directory, keep inlining the body.

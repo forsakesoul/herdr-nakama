@@ -139,7 +139,7 @@ h2::before{content:"";display:inline-block;width:20px;height:20px;margin-right:1
     <div class="section-heading"><h2>The crew</h2><span>OWNER / WORKER / ADVISOR</span></div>
     <div class="crew">
       <div class="card"><span class="role-index">01</span><h3>Owner · captain</h3><p>Investigates, freezes the handoff and accepts the result. Never writes project code.</p></div>
-      <div class="card"><span class="role-index">02</span><h3>Worker · crew at work</h3><p>The only one who changes code. Reports back when done, blocked or out of context.</p></div>
+      <div class="card"><span class="role-index">02</span><h3>Worker · crew at work</h3><p>One or more; each changes only the files assigned to it. Reports back when done, blocked or out of context.</p></div>
       <div class="card"><span class="role-index">03</span><h3>Advisor · navigator<span class="tag">optional</span></h3><p>Optional. Checks the plan and reviews the diff independently.</p></div>
     </div>
   </section>
@@ -168,7 +168,7 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
   </section>
   <section class="two restart" id="change-en">
-    <div><h2>Change the crew mid-voyage</h2><p>Add or drop the Advisor, or replace a stuck Worker, from the same <kbd>prefix</kbd>+<kbd>u</kbd> menu. Handoffs and reviews are written as files in a per-task directory, so a newcomer reads the latest handoff instead of asking around — and nothing is deleted until you say so.</p></div>
+    <div><h2>Change the crew mid-voyage</h2><p>Add or drop Workers and Advisors, or replace a stuck one, from the same <kbd>prefix</kbd>+<kbd>u</kbd> menu. Handoffs and reviews are written as files in a per-task directory, so a newcomer reads the latest handoff instead of asking around — and nothing is deleted until you say so.</p></div>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">Copy</button></div><pre>nakama add   --team &lt;id&gt; --engine &lt;engine&gt;
 nakama swap  --team &lt;id&gt; --role worker
 nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>
@@ -202,7 +202,7 @@ nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>
     <div class="section-heading"><h2>船员分工</h2><span>OWNER / WORKER / ADVISOR</span></div>
     <div class="crew">
       <div class="card"><span class="role-index">01</span><h3>Owner · 船长</h3><p>调研、冻结交接包、验收结果，自己不改项目代码。</p></div>
-      <div class="card"><span class="role-index">02</span><h3>Worker · 动手的船员</h3><p>唯一修改代码的人；完成、受阻或上下文快用完时主动回报。</p></div>
+      <div class="card"><span class="role-index">02</span><h3>Worker · 动手的船员</h3><p>一个或多个；每人只修改分配给自己的文件。完成、受阻或上下文快用完时主动回报。</p></div>
       <div class="card"><span class="role-index">03</span><h3>Advisor · 航海士<span class="tag">可选</span></h3><p>可选。独立核验方案、审查 diff。</p></div>
     </div>
   </section>
@@ -231,7 +231,7 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
   </section>
   <section class="two restart" id="change-zh">
-    <div><h2>航行中途，也能换人</h2><p>在同一个 <kbd>prefix</kbd>+<kbd>u</kbd> 菜单里加入或移除 Advisor，或替换卡住的 Worker。交接包和审查结论按任务写成文件，新来的伙伴直接读最新交接，不用别人转述；这些文件在你明确说可以删之前不会被清理。</p></div>
+    <div><h2>航行中途，也能换人</h2><p>在同一个 <kbd>prefix</kbd>+<kbd>u</kbd> 菜单里加入或移除 Worker 与 Advisor，或替换卡住的成员。交接包和审查结论按任务写成文件，新来的伙伴直接读最新交接，不用别人转述；这些文件在你明确说可以删之前不会被清理。</p></div>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">复制</button></div><pre>nakama add   --team &lt;id&gt; --engine &lt;engine&gt;
 nakama swap  --team &lt;id&gt; --role worker
 nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>
@@ -265,7 +265,7 @@ nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>
     <div class="section-heading"><h2>一味の役割</h2><span>OWNER / WORKER / ADVISOR</span></div>
     <div class="crew">
       <div class="card"><span class="role-index">01</span><h3>Owner · 船長</h3><p>調査し、引き継ぎを確定し、結果を受け入れます。プロジェクトのコードは書きません。</p></div>
-      <div class="card"><span class="role-index">02</span><h3>Worker · 手を動かす船員</h3><p>コードを変更する唯一の存在。完了・ブロック・コンテキスト不足のときに報告します。</p></div>
+      <div class="card"><span class="role-index">02</span><h3>Worker · 手を動かす船員</h3><p>コードを変更する存在（複数可）。各自、割り当てられたファイルだけを変更します。完了・ブロック・コンテキスト不足のときに報告します。</p></div>
       <div class="card"><span class="role-index">03</span><h3>Advisor · 航海士<span class="tag">任意</span></h3><p>任意。方針を検証し、diff を独立にレビューします。</p></div>
     </div>
   </section>
@@ -294,7 +294,7 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
   </section>
   <section class="two restart" id="change-ja">
-    <div><h2>航海の途中でも、仲間を入れ替えられる</h2><p>同じ <kbd>prefix</kbd>+<kbd>u</kbd> のメニューから Advisor を追加・削除したり、止まった Worker を交代させたりできます。引き継ぎやレビューの結論はタスクごとのディレクトリにファイルとして残るので、新しい仲間は最新の引き継ぎを直接読めます。削除してよいと言うまで、これらのファイルは消えません。</p></div>
+    <div><h2>航海の途中でも、仲間を入れ替えられる</h2><p>同じ <kbd>prefix</kbd>+<kbd>u</kbd> のメニューから Worker や Advisor を追加・削除したり、止まったメンバーを交代させたりできます。引き継ぎやレビューの結論はタスクごとのディレクトリにファイルとして残るので、新しい仲間は最新の引き継ぎを直接読めます。削除してよいと言うまで、これらのファイルは消えません。</p></div>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">コピー</button></div><pre>nakama add   --team &lt;id&gt; --engine &lt;engine&gt;
 nakama swap  --team &lt;id&gt; --role worker
 nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>

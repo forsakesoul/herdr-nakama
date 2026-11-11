@@ -30,6 +30,8 @@ type app struct {
 	hookBeforeRename func(role string)
 	hookAfterRename  func(role string)
 	hookBeforeCommit func()
+	// 测试钩子：split 结果（pane ID）已落盘但尚未核验时调用；返回 true 模拟在该窗口中断。
+	hookAfterSplitPersist func(pane string) bool
 
 	// 单次命令的上下文
 	anchor     Anchor
@@ -75,16 +77,16 @@ func pluginRoot() string {
 const usageText = `nakama — Herdr 原生编组插件（Owner / Worker / Advisor）
 
 用法：
-  nakama up [--owner E] [--worker E] [--advisor E|none] [--pane P] [--cwd C]
+  nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
   nakama init --team <id> [--pane P] [--cwd C]
   nakama status [--team <id>]
   nakama rebind --team <id> [--preflight | --discard-pending]
-                       [--confirm-session <owner|worker|advisor|anchor>=<session>]...
+                       [--confirm-session <成员键 O1|W1|A1|anchor>=<session>]...
                        [--confirm-anchor <terminal>]   # 电脑/Herdr 重启后显式重绑，见 README
-  nakama pick                   # 交互选择三角色引擎并建组；已有编组时为管理菜单（overlay 内运行，经 pick action 打开）
-  nakama add --team <id> [--engine E]                         # 中途加入独立 Advisor
-  nakama drop --team <id>                                     # 移除独立 Advisor
-  nakama swap --team <id> --role worker|advisor [--engine E]  # 替换角色实例（旧 pane 保留）
+  nakama pick                   # 交互选择引擎与人数并建组；已有编组时为管理菜单（overlay 内运行，经 pick action 打开）
+  nakama add --team <id> [--role worker|advisor] [--engine E]          # 中途加入 Worker 或 Advisor
+  nakama drop --team <id> [--role worker|advisor] [--instance N]       # 移除 Worker 或 Advisor
+  nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]  # 替换角色实例（旧 pane 保留）
   nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]  # 列出 / 清理任务目录
 
 引擎写法：<launcher>/<model>[:effort]，或 config.json 中 default_profile.engine_map 的简写。

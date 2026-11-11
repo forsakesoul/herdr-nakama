@@ -30,7 +30,7 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
 		restart(e, restartOpt{auto: true})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-		interruptBefore(t, e, id, "owner")
+		interruptBefore(t, e, id, "O1")
 		t.Setenv("FAKE_ANCHOR_CWD", e.proj+"/different")
 		before, renames := readState(t, e), e.count("agent", "rename")
 		ok, out := e.run("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
@@ -45,9 +45,9 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
 		restart(e, restartOpt{auto: true})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-		interruptBefore(t, e, id, "worker")
+		interruptBefore(t, e, id, "W1")
 		eq(t, stateAt(e, "rebind_pending", "steps", 0, "result"), "done", "owner 已完成")
-		name, pane := e.str("roles", "owner", "name"), e.str("roles", "owner", "pane")
+		name, pane := e.str("roles", "O1", "name"), e.str("roles", "O1", "pane")
 		e.rowSet(name, pane, "term_new_"+pane, "codex", "different-session")
 		before, renames := readState(t, e), e.count("agent", "rename")
 		ok, out := e.run("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
@@ -62,7 +62,7 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
 		restart(e, restartOpt{auto: true})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-		interruptBefore(t, e, id, "owner")
+		interruptBefore(t, e, id, "O1")
 		e.stateSet(func(m map[string]any) {
 			p := m["rebind_pending"].(map[string]any)
 			p["steps"] = planSteps(m)[:1]
@@ -81,7 +81,7 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
 		restart(e, restartOpt{auto: true})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-		interruptBefore(t, e, id, "owner")
+		interruptBefore(t, e, id, "O1")
 		e.stateSet(func(m map[string]any) {
 			planSteps(m)[0].(map[string]any)["old"].(map[string]any)["terminal_id"] = "term_bogus"
 		})
@@ -98,7 +98,7 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
 		restart(e, restartOpt{auto: true})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-		interruptBefore(t, e, id, "owner")
+		interruptBefore(t, e, id, "O1")
 		e.stateSet(func(m map[string]any) {
 			p := m["rebind_pending"].(map[string]any)
 			extra := map[string]any{}
@@ -119,9 +119,9 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 
 	t.Run("session 补全缺少确认记录：拒绝", func(t *testing.T) {
 		e, id := rebindSetup(t, false, false) // worker 记录 session 为空
-		restart(e, restartOpt{sessions: map[string]string{"worker": "sess-worker"}})
+		restart(e, restartOpt{sessions: map[string]string{"W1": "sess-worker"}})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-		interruptBefore(t, e, id, "owner", "--confirm-session", "worker=sess-worker")
+		interruptBefore(t, e, id, "O1", "--confirm-session", "worker=sess-worker")
 		e.stateSet(func(m map[string]any) {
 			m["rebind_pending"].(map[string]any)["confirm"] = []any{"anchor:terminal"}
 		})
@@ -155,7 +155,7 @@ func TestStatusBoundRequiresRecordedName(t *testing.T) {
 	has(t, e.mustRun("status", "--team", id), "binding=bound", "改名后绑定有效")
 
 	// 身份一致但任务名已被他人占用：不得显示 bound。
-	workerName, workerPane := e.str("roles", "worker", "name"), e.str("roles", "worker", "pane")
+	workerName, workerPane := e.str("roles", "W1", "name"), e.str("roles", "W1", "pane")
 	e.rowDel(workerName)
 	e.rowSet("someone-else", workerPane, "term_new_"+workerPane, "pi", "sess-worker")
 	st := e.mustRun("status", "--team", id)
@@ -167,9 +167,9 @@ func TestRebindRejectsWorkerBackOnOldTerminalBeforeRename(t *testing.T) {
 	e, id := rebindSetup(t, true, false)
 	restart(e, restartOpt{auto: true})
 	t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-	interruptBefore(t, e, id, "owner")
-	pane := e.str("roles", "worker", "pane")
-	oldTerm := e.str("roles", "worker", "identity", "terminal_id")
+	interruptBefore(t, e, id, "O1")
+	pane := e.str("roles", "W1", "pane")
+	oldTerm := e.str("roles", "W1", "identity", "terminal_id")
 	e.rowDel(bridgeAutoName(e.str("cwd"), "term_new_"+pane))
 	e.rowSet("@"+pane, pane, oldTerm, "pi", "sess-worker")
 	before, renames := readState(t, e), e.count("agent", "rename")
@@ -185,14 +185,14 @@ func TestRebindRejectsWorkerBackOnOldTerminalBeforeRename(t *testing.T) {
 // 计划中的新 session 为空（损坏计划）且观测也为空：拒绝，不改名，不提交。
 func TestRebindRejectsEmptyNewSessionInPlan(t *testing.T) {
 	e, id := rebindSetup(t, false, false)
-	restart(e, restartOpt{auto: true, sessions: map[string]string{"worker": "sess-confirmed"}})
+	restart(e, restartOpt{auto: true, sessions: map[string]string{"W1": "sess-confirmed"}})
 	t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
-	interruptBefore(t, e, id, "owner", "--confirm-session", "worker=sess-confirmed")
+	interruptBefore(t, e, id, "O1", "--confirm-session", "worker=sess-confirmed")
 	e.stateSet(func(m map[string]any) {
 		planSteps(m)[1].(map[string]any)["new"].(map[string]any)["session"] = ""
 		m["rebind_pending"].(map[string]any)["confirm"] = []any{"anchor:terminal"}
 	})
-	pane := e.str("roles", "worker", "pane")
+	pane := e.str("roles", "W1", "pane")
 	term := "term_new_" + pane
 	e.rowDel(bridgeAutoName(e.str("cwd"), term))
 	e.rowSet("@"+pane, pane, term, "pi", "")

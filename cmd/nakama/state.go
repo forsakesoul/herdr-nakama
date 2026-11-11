@@ -7,20 +7,26 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // 状态：<STATE_DIR>/teams/<safe-id>.json。只解析不执行；同目录临时文件 + rename 原子替换；目录 0700、文件 0600。
-// schema 2 增加 rebind 计划与审计；schema 3 增加任务目录、停用角色记录与 TEAM_UPDATE 待投递标记。
+// schema 2 增加 rebind 计划与审计；schema 3 增加任务目录、停用角色记录与 TEAM_UPDATE 待投递标记；
+// schema 4 把 roles 改为成员键（O1/W1/A1）到角色的 map，支持多 Worker 与多 Advisor。
 // 旧二进制读到更高的 schema 即拒绝，因此不会在丢失新字段的情况下覆盖状态。
-const schemaVersion = 3
+const schemaVersion = 4
 
 // 旧 schema 仍可读取；由本版本保存时升级为 schemaVersion。
 const (
 	schemaVersionV1 = 1
 	schemaVersionV2 = 2
+	schemaVersionV3 = 3
 )
+
+// 每类在册人数上限；只限制同时在册的人数，不限制实例号的最大值。
+const maxPerRole = 4
 
 // Ident 与 Bridge identOf 同字段：terminal|pane|kind|session。身份比较只走 sameIdent。
 type Ident struct {
@@ -62,12 +68,6 @@ type Role struct {
 	Identity       *Ident  `json:"identity"`
 }
 
-type Roles struct {
-	Owner   *Role `json:"owner"`
-	Worker  *Role `json:"worker"`
-	Advisor *Role `json:"advisor"`
-}
-
 type Anchor struct {
 	PaneID      string `json:"pane_id"`
 	WorkspaceID string `json:"workspace_id"`
@@ -92,21 +92,21 @@ type Pending struct {
 }
 
 type Team struct {
-	SchemaVersion   int            `json:"schema_version"`
-	TeamID          string         `json:"team_id"`
-	Prefix          string         `json:"prefix"`
-	Anchor          Anchor         `json:"anchor"`
-	CWD             string         `json:"cwd"`
-	Roles           Roles          `json:"roles"`
-	TeamRev         int            `json:"team_rev"`
-	ProtocolVersion string         `json:"protocol_version"`
-	Context         *Context       `json:"context"`
-	Phase           string         `json:"phase"`
-	Pending         *Pending       `json:"pending"`
-	RebindPending   *RebindPlan    `json:"rebind_pending,omitempty"`
-	Rebinds         []RebindRecord `json:"rebinds,omitempty"`
-	TaskDir         string         `json:"task_dir,omitempty"`
-	Retired         []RetiredRole  `json:"retired,omitempty"`
+	SchemaVersion   int              `json:"schema_version"`
+	TeamID          string           `json:"team_id"`
+	Prefix          string           `json:"prefix"`
+	Anchor          Anchor           `json:"anchor"`
+	CWD             string           `json:"cwd"`
+	Roles           map[string]*Role `json:"roles"` // 成员键 -> 角色，见 memberKey
+	TeamRev         int              `json:"team_rev"`
+	ProtocolVersion string           `json:"protocol_version"`
+	Context         *Context         `json:"context"`
+	Phase           string           `json:"phase"`
+	Pending         *Pending         `json:"pending"`
+	RebindPending   *RebindPlan      `json:"rebind_pending,omitempty"`
+	Rebinds         []RebindRecord   `json:"rebinds,omitempty"`
+	TaskDir         string           `json:"task_dir,omitempty"`
+	Retired         []RetiredRole    `json:"retired,omitempty"`
 }
 
 // RetiredRole：被移除或替换的角色实例。实例号不复用（请求号 req 含实例号），pane 保留给用户处理。
@@ -159,29 +159,69 @@ type RebindRecord struct {
 	AnchorNewIdentity *Ident `json:"anchor_new_identity,omitempty"`
 }
 
+// roleOrder 是角色的 kind 顺序（owner→worker→advisor）；成员遍历请用 t.members / t.membersOf。
 var roleOrder = []string{"owner", "worker", "advisor"}
 
-func (t *Team) role(name string) *Role {
-	switch name {
-	case "owner":
-		return t.Roles.Owner
-	case "worker":
-		return t.Roles.Worker
-	case "advisor":
-		return t.Roles.Advisor
+// 成员键 = 消息实例号（O1/W1/A1）。kind 由首字母推导，不单独持久化。
+// 有副作用或输出顺序相关的遍历一律用 members/membersOf（有序），不要直接 range Roles。
+const ownerKey = "O1"
+
+var memberKeyRe = regexp.MustCompile(`^[OWA][1-9][0-9]*$`)
+var keyLetter = map[string]string{"owner": "O", "worker": "W", "advisor": "A"}
+var kindByLetter = map[byte]string{'O': "owner", 'W': "worker", 'A': "advisor"}
+
+func kindOf(key string) string {
+	if key == "" {
+		return ""
 	}
-	return nil
+	return kindByLetter[key[0]]
 }
 
-func (t *Team) hasAdvisor() bool { return t.Roles.Advisor != nil }
+func memberKey(kind string, inst int) string { return fmt.Sprintf("%s%d", keyLetter[kind], inst) }
 
-func (t *Team) setRole(name string, r *Role) {
-	switch name {
-	case "worker":
-		t.Roles.Worker = r
-	case "advisor":
-		t.Roles.Advisor = r
+func keyInstance(key string) int {
+	n, _ := strconv.Atoi(key[1:])
+	return n
+}
+
+func (t *Team) role(key string) *Role { return t.Roles[key] }
+
+func (t *Team) owner() *Role { return t.Roles[ownerKey] }
+
+func (t *Team) hasAdvisor() bool { return len(t.membersOf("advisor")) > 0 }
+
+func (t *Team) addRole(key string, r *Role) {
+	if t.Roles == nil {
+		t.Roles = map[string]*Role{}
 	}
+	t.Roles[key] = r
+}
+
+// members 按 owner→worker→advisor、同类按实例号升序返回成员键。
+func (t *Team) members() []string {
+	var out []string
+	for _, kind := range roleOrder {
+		out = append(out, t.membersOf(kind)...)
+	}
+	return out
+}
+
+// initOrder 是 init / [TEAM_UPDATE] 的投递顺序：Worker → Advisor → Owner（与既有语义一致）。
+func (t *Team) initOrder() []string {
+	out := append([]string{}, t.membersOf("worker")...)
+	out = append(out, t.membersOf("advisor")...)
+	return append(out, t.membersOf("owner")...)
+}
+
+func (t *Team) membersOf(kind string) []string {
+	var keys []string
+	for k := range t.Roles {
+		if kindOf(k) == kind {
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool { return keyInstance(keys[i]) < keyInstance(keys[j]) })
+	return keys
 }
 
 var roleSuffix = map[string]string{"owner": "_design", "worker": "_execute", "advisor": "_advisor"}
@@ -194,14 +234,16 @@ func roleName(prefix, role string, instance int) string {
 	return fmt.Sprintf("%s%s%d", prefix, roleSuffix[role], instance)
 }
 
-// 下一个实例号：高于当前与所有已停用实例。
-func (t *Team) nextInstance(role string) int {
+// 下一个实例号（按 kind）：高于同类在册与所有已停用实例；实例号不复用。
+func (t *Team) nextInstance(kind string) int {
 	n := 0
-	if r := t.role(role); r != nil {
-		n = r.Instance
+	for _, k := range t.membersOf(kind) {
+		if i := keyInstance(k); i > n {
+			n = i
+		}
 	}
 	for _, x := range t.Retired {
-		if x.Role == role && x.Instance > n {
+		if x.Role == kind && x.Instance > n {
 			n = x.Instance
 		}
 	}
@@ -210,6 +252,84 @@ func (t *Team) nextInstance(role string) int {
 
 func (t *Team) setPending(role, step, delivery string) {
 	t.Pending = &Pending{OpID: fmt.Sprint(time.Now().UnixNano()), Role: role, Step: step, Delivery: delivery}
+}
+
+// 旧 schema（1-3）的 roles 是 owner/worker/advisor 三槽。读入时在内存中改写为成员键，文件本身不在此改写；
+// 只有之后的实际保存才写出 schema 4。映射无法确定（如引用了不存在的角色）时拒绝，不补默认值。
+type legacyRoles struct {
+	Owner   *Role `json:"owner"`
+	Worker  *Role `json:"worker"`
+	Advisor *Role `json:"advisor"`
+}
+
+func (t *Team) UnmarshalJSON(b []byte) error {
+	type plain Team
+	aux := struct {
+		*plain
+		Roles json.RawMessage `json:"roles"`
+	}{plain: (*plain)(t)}
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+	if t.SchemaVersion >= schemaVersion {
+		return json.Unmarshal(aux.Roles, &t.Roles)
+	}
+	var lr legacyRoles
+	if err := json.Unmarshal(aux.Roles, &lr); err != nil {
+		return err
+	}
+	return t.migrateLegacy(lr)
+}
+
+func (t *Team) migrateLegacy(lr legacyRoles) error {
+	t.Roles = map[string]*Role{}
+	keyOf := map[string]string{}
+	for _, kr := range []struct {
+		kind string
+		r    *Role
+	}{{"owner", lr.Owner}, {"worker", lr.Worker}, {"advisor", lr.Advisor}} {
+		if kr.r == nil {
+			continue
+		}
+		k := memberKey(kr.kind, kr.r.Instance)
+		keyOf[kr.kind] = k
+		t.Roles[k] = kr.r
+	}
+	mapKind := func(kind string) (string, error) {
+		if k, ok := keyOf[kind]; ok {
+			return k, nil
+		}
+		return "", fmt.Errorf(L("旧状态引用了不存在的角色 %s；请人工检查，不自动接管。"), kind)
+	}
+	if p := t.Pending; p != nil && p.Role != "" {
+		k, err := mapKind(p.Role)
+		if err != nil {
+			return err
+		}
+		p.Role = k
+	}
+	if rp := t.RebindPending; rp != nil {
+		for i := range rp.Steps {
+			k, err := mapKind(rp.Steps[i].Role)
+			if err != nil {
+				return err
+			}
+			rp.Steps[i].Role = k
+		}
+		// 确认项形如 worker:session；anchor:* 不属于角色，原样保留。历史 Rebinds 是审计快照，不改写。
+		for i, c := range rp.Confirm {
+			kind, rest, ok := strings.Cut(c, ":")
+			if !ok || kind == "anchor" {
+				continue
+			}
+			k, err := mapKind(kind)
+			if err != nil {
+				return err
+			}
+			rp.Confirm[i] = k + ":" + rest
+		}
+	}
+	return nil
 }
 
 type store struct{ dir string }
@@ -382,7 +502,19 @@ func validIdent(v any, pane any, needSessionType bool) bool {
 }
 
 // rebind 计划校验：字段齐备、角色名合法、结果取值受限；不校验与当前角色的一致性（由 rebind 预检负责）。
-func validRebindPlan(v any) bool {
+// validRoleRef：角色引用在 schema 1-3 为 owner/worker/advisor，在 schema 4 为成员键。
+func validRoleRef(v any, ver float64) bool {
+	s, ok := v.(string)
+	if !ok {
+		return false
+	}
+	if ver >= schemaVersion {
+		return memberKeyRe.MatchString(s)
+	}
+	return s == "owner" || s == "worker" || s == "advisor"
+}
+
+func validRebindPlan(v any, ver float64) bool {
 	p, ok := v.(map[string]any)
 	if !ok || !nonEmptyStr(p["op_id"]) {
 		return false
@@ -396,9 +528,7 @@ func validRebindPlan(v any) bool {
 		if !ok || !nonEmptyStr(s["pane"]) || !nonEmptyStr(s["name"]) {
 			return false
 		}
-		switch s["role"] {
-		case "owner", "worker", "advisor":
-		default:
+		if !validRoleRef(s["role"], ver) {
 			return false
 		}
 		if _, isBool := s["rename"].(bool); !isBool || !validIdent(s["old"], s["pane"], true) || !validIdent(s["new"], s["pane"], true) {
@@ -439,11 +569,11 @@ func validateTeam(raw []byte) error {
 		return bad
 	}
 	v, ok := t["schema_version"].(float64)
-	if !ok || (v != schemaVersionV1 && v != schemaVersionV2 && v != schemaVersion) {
+	if !ok || v != float64(int(v)) || v < schemaVersionV1 || v > schemaVersion {
 		return bad
 	}
 	// 低版本 schema 不得携带更高版本才有的字段：出现即视为损坏，而不是静默忽略。
-	if v < schemaVersion && (t["task_dir"] != nil || t["retired"] != nil) {
+	if v < schemaVersionV3 && (t["task_dir"] != nil || t["retired"] != nil) {
 		return bad
 	}
 	if td, has := t["task_dir"]; has && td != nil && !nonEmptyStr(td) {
@@ -466,7 +596,7 @@ func validateTeam(raw []byte) error {
 	if v == schemaVersionV1 && (t["rebind_pending"] != nil || t["rebinds"] != nil) {
 		return bad
 	}
-	if rp := t["rebind_pending"]; rp != nil && !validRebindPlan(rp) {
+	if rp := t["rebind_pending"]; rp != nil && !validRebindPlan(rp, v) {
 		return bad
 	}
 	if rbs, has := t["rebinds"]; has && rbs != nil {
@@ -495,48 +625,59 @@ func validateTeam(raw []byte) error {
 	default:
 		return bad
 	}
-	if v < schemaVersion && phase == "changing" {
+	if v < schemaVersionV3 && phase == "changing" {
 		return bad
 	}
 	roles, ok := t["roles"].(map[string]any)
 	if !ok {
 		return bad
 	}
-	for _, rn := range roleOrder {
-		r, isObj := roles[rn].(map[string]any)
-		if !isObj {
-			if roles[rn] == nil && rn == "advisor" {
+	counts := map[string]int{}
+	for key, rv := range roles {
+		kind := key
+		if v >= schemaVersion {
+			if !memberKeyRe.MatchString(key) {
+				return bad
+			}
+			kind = kindOf(key)
+		} else if key != "owner" && key != "worker" && key != "advisor" {
+			return bad
+		}
+		if rv == nil {
+			// 旧 schema 只允许 advisor 为空；schema 4 的成员值一律非 null。
+			if v < schemaVersion && kind == "advisor" {
 				continue
 			}
 			return bad
 		}
-		inst, _ := r["instance"].(float64)
-		if r["name"] != roleName(prefix, rn, int(inst)) {
-			return bad
-		}
-	}
-	for rn, rv := range roles {
-		if rv == nil {
-			continue
-		}
 		r, ok := rv.(map[string]any)
-		if !ok || (v < schemaVersion && r["team_update_pending"] != nil) {
+		if !ok || (v < schemaVersionV3 && r["team_update_pending"] != nil) {
 			return bad
 		}
 		inst, isNum := r["instance"].(float64)
+		if !isNum || inst != float64(int64(inst)) || inst < 1 {
+			return bad
+		}
+		if v >= schemaVersion && int(inst) != keyInstance(key) {
+			return bad
+		}
+		if r["name"] != roleName(prefix, kind, int(inst)) {
+			return bad
+		}
 		_, inited := r["inited"].(bool)
 		_, launched := r["launched"].(bool)
 		pane := r["pane"]
-		if _, isStr := r["name"].(string); !isStr || !nonEmptyStr(r["engine"]) || !isNum || inst != float64(int64(inst)) || inst < 1 || !inited || !launched {
+		if _, isStr := r["name"].(string); !isStr || !nonEmptyStr(r["engine"]) || !inited || !launched {
 			return bad
 		}
 		if pane != nil && !nonEmptyStr(pane) {
 			return bad
 		}
 		// changing 只允许被新增/替换的 Worker / Advisor 尚无 pane；Owner 不可变更。
-		if pane == nil && phase != "starting" && (phase != "changing" || rn == "owner") {
+		if pane == nil && phase != "starting" && (phase != "changing" || kind == "owner") {
 			return bad
 		}
+		counts[kind]++
 		if r["inited"] == true && r["identity"] == nil {
 			return bad
 		}
@@ -545,6 +686,25 @@ func validateTeam(raw []byte) error {
 		}
 		if r["launch_identity"] != nil && !validIdent(r["launch_identity"], pane, false) {
 			return bad
+		}
+	}
+	if v < schemaVersion && (roles["owner"] == nil || roles["worker"] == nil) {
+		return bad
+	}
+	if v >= schemaVersion {
+		// schema 4 严格计数：恰好一个 Owner（O1），Worker 1..4，Advisor 0..4；不先过滤坏键再修复。
+		if counts["owner"] != 1 || roles[ownerKey] == nil || counts["worker"] < 1 || counts["worker"] > maxPerRole || counts["advisor"] > maxPerRole {
+			return bad
+		}
+		// 已停用实例与在册同类实例号不得重复（实例号不复用）。
+		if rt, _ := t["retired"].([]any); rt != nil {
+			for _, x := range rt {
+				m, _ := x.(map[string]any)
+				inst, _ := m["instance"].(float64)
+				if _, live := roles[memberKey(fmt.Sprint(m["role"]), int(inst))]; live {
+					return bad
+				}
+			}
 		}
 	}
 	if p := t["pending"]; p != nil {
@@ -558,6 +718,9 @@ func validateTeam(raw []byte) error {
 		switch pm["delivery"] {
 		case "NOT_SENT", "SENT", "UNKNOWN":
 		default:
+			return bad
+		}
+		if role, has := pm["role"]; has && role != nil && role != "" && !validRoleRef(role, v) {
 			return bad
 		}
 	}

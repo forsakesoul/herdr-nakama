@@ -73,17 +73,54 @@ func b2i(b bool) int {
 	return 0
 }
 
+// mapping：每个成员一段；单个成员时输出与单槽实现逐字一致（默认 1+1 组的 prompt 不变）。
+// 单成员的整句仍由基线格式串（含结尾标点）翻译，避免把中文标点当参数插入译文。
 func (t *Team) mapping() string {
-	o, w, ad := t.Roles.Owner, t.Roles.Worker, t.Roles.Advisor
-	s := fmt.Sprintf(L("任务=%s；Owner=%s，pane=%s，%s；执行者=%s，pane=%s，%s；"), t.Prefix, o.Name, o.Pane, o.Engine, w.Name, w.Pane, w.Engine)
-	adv := L("无")
-	if ad != nil {
-		s += fmt.Sprintf(L("独立 Advisor=%s，pane=%s，%s。"), ad.Name, ad.Pane, ad.Engine)
-		adv = fmt.Sprintf("A%d", ad.Instance)
-	} else {
+	o := t.owner()
+	workers := t.membersOf("worker")
+	w1 := t.role(workers[0])
+	s := fmt.Sprintf(L("任务=%s；Owner=%s，pane=%s，%s；执行者=%s，pane=%s，%s；"), t.Prefix, o.Name, o.Pane, o.Engine, w1.Name, w1.Pane, w1.Engine)
+	for _, k := range workers[1:] {
+		w := t.role(k)
+		s += fmt.Sprintf(L("执行者=%s，pane=%s，%s；"), w.Name, w.Pane, w.Engine)
+	}
+	advisors := t.membersOf("advisor")
+	if len(advisors) == 0 {
 		s += L("无独立 Advisor。")
 	}
-	return s + fmt.Sprintf(L("消息实例：Owner=O%d；Worker=W%d；Advisor=%s"), o.Instance, w.Instance, adv)
+	for i, k := range advisors {
+		ad := t.role(k)
+		if i == len(advisors)-1 {
+			s += fmt.Sprintf(L("独立 Advisor=%s，pane=%s，%s。"), ad.Name, ad.Pane, ad.Engine)
+		} else {
+			s += fmt.Sprintf(L("独立 Advisor=%s，pane=%s，%s；"), ad.Name, ad.Pane, ad.Engine)
+		}
+	}
+	return s + t.instanceLine()
+}
+
+// 消息实例行：单个成员保持 Worker=W1 / Advisor=A1 旧写法；多个时附实例号对应的名称。
+func (t *Team) instanceLine() string {
+	part := func(kind string) string {
+		keys := t.membersOf(kind)
+		switch len(keys) {
+		case 0:
+			return L("无")
+		case 1:
+			return keys[0]
+		}
+		var xs []string
+		for _, k := range keys {
+			xs = append(xs, k+"="+t.role(k).Name)
+		}
+		return strings.Join(xs, "/")
+	}
+	return fmt.Sprintf(L("消息实例：Owner=O%d；Worker=%s；Advisor=%s"), t.owner().Instance, part("worker"), part("advisor"))
+}
+
+// 你的实例行：init 与 [TEAM_UPDATE] 都带上，让每个成员认清自己的键与名称。
+func selfLine(t *Team, key string) string {
+	return fmt.Sprintf(L("你的实例：%s（%s）"), key, t.role(key).Name) + "\n"
 }
 
 // 映射之后的附加行：已停用实例、任务目录与清理命令。旧组（无任务目录、无停用实例）为空，prompt 不变。
@@ -105,27 +142,27 @@ func (a *app) mappingExtras(t *Team) string {
 }
 
 // [TEAM_UPDATE]：最新映射 + 该角色在新编组下的分工规则块。
-func (a *app) teamUpdatePrompt(t *Team, rn string) (string, error) {
+func (a *app) teamUpdatePrompt(t *Team, key string) (string, error) {
 	variant := "none"
 	if t.hasAdvisor() {
 		variant = "advisor"
 	}
-	tpl, err := os.ReadFile(a.promptPath(rn))
+	tpl, err := os.ReadFile(a.promptPath(kindOf(key)))
 	if err != nil {
-		return "", a.fail(L("无法读取角色模板 %s：%v"), rn, err)
+		return "", a.fail(L("无法读取角色模板 %s：%v"), key, err)
 	}
-	return fmt.Sprintf("[TEAM_UPDATE] team_rev=%d\n%s\n%s%s", t.TeamRev, t.mapping(), a.mappingExtras(t), teamRule(string(tpl), variant)) +
+	return fmt.Sprintf("[TEAM_UPDATE] team_rev=%d\n%s\n%s%s%s", t.TeamRev, t.mapping(), a.mappingExtras(t), selfLine(t, key), teamRule(string(tpl), variant)) +
 		L("这是编组控制消息：以本条为准更新编组映射与分工，不回 ACK，不改变当前交接版本、冻结范围和授权。Owner 向新实例派单前，先核对被替换的旧执行者已停止写入。"), nil
 }
 
 // 组装完整 prompt；与旧实现一样去掉尾部换行。
-func (a *app) assemblePrompt(t *Team, rn string) (string, error) {
+func (a *app) assemblePrompt(t *Team, key string) (string, error) {
 	variant := "none"
 	if t.hasAdvisor() {
 		variant = "advisor"
 	}
 	var b strings.Builder
-	b.WriteString(t.mapping() + "\n" + a.mappingExtras(t) + "\n")
+	b.WriteString(t.mapping() + "\n" + a.mappingExtras(t) + selfLine(t, key) + "\n")
 	if t.Context != nil && t.Context.File != "" {
 		body, err := os.ReadFile(t.Context.File)
 		if err != nil {
@@ -140,10 +177,11 @@ func (a *app) assemblePrompt(t *Team, rn string) (string, error) {
 	b.Write(proto)
 	b.WriteString("\n\n")
 
-	incMid := rn == "advisor" && t.Roles.Owner.Inited
-	tpl, err := os.ReadFile(a.promptPath(rn))
+	kind := kindOf(key)
+	incMid := kind != "owner" && t.owner().Inited
+	tpl, err := os.ReadFile(a.promptPath(kind))
 	if err != nil {
-		return "", a.fail(L("无法读取角色模板 %s：%v"), rn, err)
+		return "", a.fail(L("无法读取角色模板 %s：%v"), key, err)
 	}
 	role := renderRole(string(tpl), variant, incMid)
 	b.WriteString(role)

@@ -21,15 +21,15 @@ func TestUpInitIdempotent2and3(t *testing.T) { // A: 2 方 / 3 方，重复 up/i
 	eq(t, e.count("agent", "start"), 1, "唯一 codex 走 agent start")
 	eq(t, e.count("pane", "run"), 1, "pi worker 走 pane run")
 	eq(t, e.str("phase"), "launched", "phase")
-	eq(t, e.str("roles", "owner", "instance"), "1", "owner 实例")
-	eq(t, e.str("roles", "worker", "pane"), "w0:p11", "worker pane")
-	eq(t, e.str("roles", "worker", "launch_identity", "terminal_id"), "term_w0:p11", "启动观测落盘")
+	eq(t, e.str("roles", "O1", "instance"), "1", "owner 实例")
+	eq(t, e.str("roles", "W1", "pane"), "w0:p11", "worker pane")
+	eq(t, e.str("roles", "W1", "launch_identity", "terminal_id"), "term_w0:p11", "启动观测落盘")
 	id := e.teamID()
 	e.mustRun("init", "--team", id)
 	eq(t, e.count("agent", "prompt"), 2, "init 初始化 owner+worker")
 	eq(t, e.count("agent", "rename"), 1, "pi worker 需 rename 绑定")
 	eq(t, e.str("phase"), "initialized", "phase")
-	eq(t, e.str("roles", "worker", "identity", "terminal_id"), "term_w0:p11", "identity 落盘")
+	eq(t, e.str("roles", "W1", "identity", "terminal_id"), "term_w0:p11", "identity 落盘")
 	e.mustRun("up")
 	eq(t, e.count("pane", "split"), 2, "重复 up 不新增 split")
 	e.mustRun("init", "--team", id)
@@ -98,7 +98,7 @@ func TestHalfTeamResumeRejectsContextDrift(t *testing.T) { // starting 半组 + 
 	e.mustRun("up")
 	e.stateSet(func(m map[string]any) {
 		m["phase"] = "starting"
-		w := dig(m, "roles", "worker").(map[string]any)
+		w := dig(m, "roles", "W1").(map[string]any)
 		w["pane"], w["launched"], w["launch_identity"], w["identity"] = nil, false, nil, nil
 	})
 	f, _ := os.OpenFile(e.ctx, os.O_APPEND|os.O_WRONLY, 0)
@@ -135,7 +135,7 @@ func TestSignalLetsInFlightSplitFinishThenStops(t *testing.T) {
 		t.Fatalf("父进程应在子进程完成后以 1 退出，得到 %v", err)
 	}
 	eq(t, e.count("pane", "split"), 1, "仅在途的那次 split")
-	eq(t, e.str("roles", "owner", "pane"), "w0:p10", "在途 split 的结果已落盘")
+	eq(t, e.str("roles", "O1", "pane"), "w0:p10", "在途 split 的结果已落盘")
 	eq(t, e.count("agent", "start"), 0, "之后无 start")
 	eq(t, e.count("pane", "run"), 0, "之后无 run")
 	left, _ := filepath.Glob(filepath.Join(os.Getenv("HERDR_PLUGIN_STATE_DIR"), "locks", "*.lock"))
@@ -160,7 +160,7 @@ func TestReplacedInstanceRejected(t *testing.T) { // D: 实例被替换
 	e := newEnv(t)
 	e.config("normal")
 	e.mustRun("up")
-	e.rowSet(e.str("roles", "worker", "name"), "w0:p99", "term_w0:p99", "codex", "")
+	e.rowSet(e.str("roles", "W1", "name"), "w0:p99", "term_w0:p99", "codex", "")
 	has(t, e.mustFail("init", "--team", e.teamID()), "漂移", "拒绝实例被替换")
 	eq(t, e.count("agent", "prompt"), 0, "实例漂移不发 prompt（含不继续初始化后续角色）")
 }
@@ -178,8 +178,8 @@ func TestShaAndConfigIsolation(t *testing.T) { // E
 	e := newEnv(t)
 	e.config("normal")
 	e.mustRun("up")
-	eq(t, e.str("roles", "owner", "instance"), "1", "owner 实例")
-	eq(t, e.str("roles", "worker", "instance"), "1", "worker 实例")
+	eq(t, e.str("roles", "O1", "instance"), "1", "owner 实例")
+	eq(t, e.str("roles", "W1", "instance"), "1", "worker 实例")
 	if !regexpMust(`^dm_[0-9a-f]{12}$`).MatchString(e.str("prefix")) {
 		t.Fatalf("prefix 形如 dm_<12hex>：%s", e.str("prefix"))
 	}
@@ -200,8 +200,8 @@ func TestNaming(t *testing.T) { // F1: task_ 前缀 / 名称预校验 / 换行 p
 	t.Setenv("FAKE_STRICT_NAME", "1")
 	e.mustRun("up")
 	eq(t, e.count("pane", "split"), 2, "无项目建组")
-	if !regexpMust(`^task_[0-9a-f]{12}_design$`).MatchString(e.str("roles", "owner", "name")) {
-		t.Fatalf("缺省前缀应为 task_：%s", e.str("roles", "owner", "name"))
+	if !regexpMust(`^task_[0-9a-f]{12}_design$`).MatchString(e.str("roles", "O1", "name")) {
+		t.Fatalf("缺省前缀应为 task_：%s", e.str("roles", "O1", "name"))
 	}
 
 	e = newEnv(t)
@@ -241,7 +241,7 @@ func TestFirstFreezeIdentityChecks(t *testing.T) { // F2 / F2b：首次冻结取
 		{"自动名但无启动指纹", func(e *tenv, wp, _ string) {
 			e.rowDel("@" + wp)
 			e.rowSet("proj-e2d2", wp, "term_w0:p11", "pi", "")
-			e.stateSet(func(m map[string]any) { asMap(asMap(m["roles"])["worker"])["launch_identity"] = nil })
+			e.stateSet(func(m map[string]any) { asMap(asMap(m["roles"])["W1"])["launch_identity"] = nil })
 		}, "缺少启动观测"},
 		{"名称被他占", func(e *tenv, _ string, wn string) { e.rowSet(wn, "w0:p77", "term_w0:p77", "claude", "") }, ""},
 	}
@@ -250,7 +250,7 @@ func TestFirstFreezeIdentityChecks(t *testing.T) { // F2 / F2b：首次冻结取
 			e := newEnv(t)
 			e.config("normal")
 			e.mustRun("up")
-			wn, wp := e.str("roles", "worker", "name"), e.str("roles", "worker", "pane")
+			wn, wp := e.str("roles", "W1", "name"), e.str("roles", "W1", "pane")
 			c.tamper(e, wp, wn)
 			out := e.mustFail("init", "--team", e.teamID())
 			if c.want != "" {
@@ -280,7 +280,7 @@ func TestInitAfterBridgeAutoName(t *testing.T) {
 					t.Setenv("NAKAMA_FAKE_MANUAL_NAME", "proj-e2d2")
 				}
 				e.mustRun("up", "--owner", "codex/gpt-6.1-sol:high", "--worker", launcher)
-				wp := e.str("roles", "worker", "pane")
+				wp := e.str("roles", "W1", "pane")
 				eng, _ := parseEngine(launcher)
 				// Bridge autoNameFor(".../proj", "term_w0:p11") 的独立固定样本。
 				e.rowDel("@" + wp)
@@ -303,7 +303,7 @@ func TestRenameThenFingerprintDrift(t *testing.T) { // F12（F1 修复）：rena
 	has(t, e.mustFail("init", "--team", e.teamID()), "指纹", "rename 后漂移提示")
 	eq(t, e.count("agent", "prompt"), 0, "0 prompt")
 	eq(t, e.count("agent", "rename"), 1, "rename 已发生无法撤回，接受 1 次")
-	if dig(e.state(), "roles", "worker", "identity") != nil {
+	if dig(e.state(), "roles", "W1", "identity") != nil {
 		t.Fatal("不得冻结新实例")
 	}
 }
@@ -449,7 +449,7 @@ func TestHalfTeamResume(t *testing.T) { // F7: 半组恢复补建缺失步骤
 	e.mustRun("up")
 	e.stateSet(func(m map[string]any) {
 		m["phase"] = "starting"
-		w := dig(m, "roles", "worker").(map[string]any)
+		w := dig(m, "roles", "W1").(map[string]any)
 		w["pane"], w["launched"], w["launch_identity"], w["identity"] = nil, false, nil, nil
 	})
 	before := e.count("pane", "split")
@@ -466,9 +466,9 @@ func TestHalfTeamOccupancy(t *testing.T) { // F7 余项：占用三态在 run/st
 		e.mustRun("up")
 		e.stateSet(func(m map[string]any) {
 			m["phase"] = "starting"
-			dig(m, "roles", "owner").(map[string]any)["launched"] = false
+			dig(m, "roles", "O1").(map[string]any)["launched"] = false
 			if both {
-				dig(m, "roles", "worker").(map[string]any)["launched"] = false
+				dig(m, "roles", "W1").(map[string]any)["launched"] = false
 			}
 		})
 		return e
@@ -476,8 +476,8 @@ func TestHalfTeamOccupancy(t *testing.T) { // F7 余项：占用三态在 run/st
 	t.Run("已占用", func(t *testing.T) {
 		e := setup(t, false)
 		bs, br, bp := e.count("agent", "start"), e.count("pane", "run"), e.count("pane", "split")
-		e.rowDel(e.str("roles", "owner", "name"))
-		e.paneRowSet(e.str("roles", "owner", "pane"), "term_user", "claude", "")
+		e.rowDel(e.str("roles", "O1", "name"))
+		e.paneRowSet(e.str("roles", "O1", "pane"), "term_user", "claude", "")
 		has(t, e.mustFail("up"), "occupied", "提示占用")
 		eq(t, e.count("agent", "start"), bs, "0 agent start")
 		eq(t, e.count("pane", "run"), br, "0 pane run")
@@ -496,8 +496,8 @@ func TestHalfTeamOccupancy(t *testing.T) { // F7 余项：占用三态在 run/st
 	t.Run("缺 terminal", func(t *testing.T) {
 		e := setup(t, true)
 		bs, br := e.count("agent", "start"), e.count("pane", "run")
-		e.rowDel(e.str("roles", "owner", "name"))
-		e.paneRowSet(e.str("roles", "owner", "pane"), "", "claude", "")
+		e.rowDel(e.str("roles", "O1", "name"))
+		e.paneRowSet(e.str("roles", "O1", "pane"), "", "claude", "")
 		out := e.mustFail("up")
 		has(t, out, "unknown", "incomplete 终止")
 		has(t, out, "incomplete_object", "分类 incomplete_object")
@@ -522,26 +522,26 @@ func TestStateValidationRejects(t *testing.T) { // F8
 	reject("schema 999", func(m map[string]any) { m["schema_version"] = 999 }, "校验失败")
 	reject("pane=null", func(m map[string]any) {
 		m["schema_version"] = 1
-		dig(m, "roles", "owner").(map[string]any)["pane"] = nil
+		dig(m, "roles", "O1").(map[string]any)["pane"] = nil
 	}, "")
 	reject("inited 无身份", func(m map[string]any) {
-		o := dig(m, "roles", "owner").(map[string]any)
+		o := dig(m, "roles", "O1").(map[string]any)
 		o["pane"], o["inited"], o["identity"] = "w0:p10", true, nil
 	}, "")
 	reject("team_id 不一致", func(m map[string]any) {
-		o := dig(m, "roles", "owner").(map[string]any)
+		o := dig(m, "roles", "O1").(map[string]any)
 		o["inited"] = false
 		m["team_id"] = "mismatch"
 	}, "不一致")
 	reject("instance 1.5", func(m map[string]any) {
 		m["team_id"] = id
-		dig(m, "roles", "worker").(map[string]any)["instance"] = 1.5
+		dig(m, "roles", "W1").(map[string]any)["instance"] = 1.5
 	}, "校验失败")
 	reject("角色名不匹配", func(m map[string]any) {
-		w := dig(m, "roles", "worker").(map[string]any)
+		w := dig(m, "roles", "W1").(map[string]any)
 		w["instance"], w["name"] = 1, "wrong_role"
 	}, "")
-	e.stateSet(func(m map[string]any) { dig(m, "roles", "worker").(map[string]any)["name"] = id + "_execute" })
+	e.stateSet(func(m map[string]any) { dig(m, "roles", "W1").(map[string]any)["name"] = id + "_execute" })
 	b, _ := os.ReadFile(e.stateFile())
 	foo := filepath.Join(filepath.Dir(e.stateFile()), "foo.json")
 	os.WriteFile(foo, b, 0o600)
@@ -554,7 +554,7 @@ func TestStateRequiresExplicitFields(t *testing.T) { // 缺必需字段/null 不
 	e.mustRun("up")
 	id := e.teamID()
 	for _, drop := range []string{"inited", "launched", "engine", "instance", "name"} {
-		e.stateSet(func(m map[string]any) { delete(dig(m, "roles", "worker").(map[string]any), drop) })
+		e.stateSet(func(m map[string]any) { delete(dig(m, "roles", "W1").(map[string]any), drop) })
 		has(t, e.mustFail("status", "--team", id), "校验失败", "缺 "+drop)
 		e.stateSet(func(m map[string]any) {}) // 无操作，保持文件
 		e = newEnv(t)
@@ -592,7 +592,7 @@ func TestNativeIdentityFlow(t *testing.T) { // F2a / F2b native
 	e.config("codex")
 	t.Setenv("NAKAMA_FAKE_GET_FAIL", "1")
 	has(t, e.mustFail("up"), "无法取得完整身份", "提示取证失败")
-	if dig(e.state(), "roles", "owner", "identity") != nil {
+	if dig(e.state(), "roles", "O1", "identity") != nil {
 		t.Fatal("不得冻结 identity")
 	}
 	eq(t, e.str("pending", "delivery"), "UNKNOWN", "pending=UNKNOWN")
@@ -601,8 +601,8 @@ func TestNativeIdentityFlow(t *testing.T) { // F2a / F2b native
 	e.config("codex")
 	t.Setenv("NAKAMA_FAKE_GET_FAIL", "")
 	e.mustRun("up")
-	on := e.str("roles", "owner", "name")
-	e.stateSet(func(m map[string]any) { dig(m, "roles", "owner").(map[string]any)["identity"] = nil })
+	on := e.str("roles", "O1", "name")
+	e.stateSet(func(m map[string]any) { dig(m, "roles", "O1").(map[string]any)["identity"] = nil })
 	has(t, e.mustFail("init", "--team", e.teamID()), "缺少冻结身份", "提示缺身份")
 	eq(t, len(e.prompts(on)), 0, "Owner 不 prompt")
 }
@@ -643,7 +643,7 @@ func TestInitedDriftBecomesStale(t *testing.T) { // F2d
 	e.mustRun("up")
 	e.mustRun("init", "--team", e.teamID())
 	before := e.count("agent", "prompt")
-	e.rowSet(e.str("roles", "worker", "name"), e.str("roles", "worker", "pane"), "term_changed", "pi", "")
+	e.rowSet(e.str("roles", "W1", "name"), e.str("roles", "W1", "pane"), "term_changed", "pi", "")
 	out := e.mustFail("init", "--team", e.teamID())
 	eq(t, e.count("agent", "prompt"), before, "不重发")
 	hasNot(t, out, "READY", "不 READY")
@@ -676,8 +676,8 @@ func TestDelayedRecognitionFirstFreeze(t *testing.T) { // F2b：延迟识别
 	t.Setenv("NAKAMA_FAKE_GET_DELAY_N", "3")
 	e.mustRun("up")
 	e.mustRun("init", "--team", e.teamID())
-	eq(t, e.str("roles", "owner", "identity", "terminal_id"), "term_w0:p10", "延迟后冻结")
-	eq(t, e.str("roles", "owner", "identity", "kind"), "pi", "kind=pi")
+	eq(t, e.str("roles", "O1", "identity", "terminal_id"), "term_w0:p10", "延迟后冻结")
+	eq(t, e.str("roles", "O1", "identity", "kind"), "pi", "kind=pi")
 }
 
 func TestAgentPaneBusyBoundedRetry(t *testing.T) { // 仅启动前 agent_pane_busy 有界重试
@@ -716,27 +716,27 @@ func TestPromptAssemblyShape(t *testing.T) { // prompts 正文与组装顺序
 	e.config("normal")
 	e.mustRun("up", "--advisor", "cc")
 	e.mustRun("init", "--team", e.teamID())
-	op := e.prompts(e.str("roles", "owner", "name"))[0]
+	op := e.prompts(e.str("roles", "O1", "name"))[0]
 	has(t, op, "消息实例：Owner=O1；Worker=W1；Advisor=A1", "映射行")
 	pi, ci, ri := strings.Index(op, "项目上下文（来源："), strings.Index(op, "协议"), strings.Index(op, "设计 Owner")
 	if !(pi >= 0 && pi < ri) || ci < 0 {
 		t.Fatalf("顺序应为 映射 → 上下文 → protocol → 角色模板：%d %d %d", pi, ci, ri)
 	}
-	has(t, op, "当前有独立 advisor 联合设计", "advisor 规则块")
+	has(t, op, "当前有一个或多个独立 advisor 联合设计", "advisor 规则块")
 	hasNot(t, op, "当前没有独立 advisor", "无 advisor 块不出现")
 	hasNot(t, op, "<!--", "标记行不输出")
 	if strings.HasSuffix(op, "\n") {
 		t.Fatal("尾部换行应被去掉")
 	}
 	// init 顺序 worker → advisor → owner：Advisor 初始化时 Owner 尚未 inited，不带 mid-task 块。
-	hasNot(t, e.prompts(e.str("roles", "advisor", "name"))[0], "任务已在进行中加入", "Owner 未 inited 时无 mid-task 块")
+	hasNot(t, e.prompts(e.str("roles", "A1", "name"))[0], "任务已在进行中加入", "Owner 未 inited 时无 mid-task 块")
 	a := &app{stdout: &syncBuf{}, stderr: &syncBuf{}, root: e.repoRoot, st: newStore()}
 	tm, err := a.st.load(e.teamID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	tm.Roles.Owner.Inited = true
-	late, err := a.assemblePrompt(tm, "advisor")
+	tm.owner().Inited = true
+	late, err := a.assemblePrompt(tm, "A1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,7 +751,7 @@ func TestSignalAfterLastSideEffectStillNonZero(t *testing.T) {
 	barrier := filepath.Join(e.root, "prompt-barrier")
 	os.MkdirAll(barrier, 0o755)
 	t.Setenv("NAKAMA_FAKE_PROMPT_BARRIER", barrier)
-	t.Setenv("NAKAMA_FAKE_PROMPT_BARRIER_NAME", e.str("roles", "owner", "name"))
+	t.Setenv("NAKAMA_FAKE_PROMPT_BARRIER_NAME", e.str("roles", "O1", "name"))
 	exe, _ := os.Executable()
 	cmd := exec.Command(exe, "--hr-run-main", "init", "--team", e.teamID())
 	cmd.Env = append(os.Environ(), "HERDR_PLUGIN_ROOT="+e.repoRoot)
@@ -780,17 +780,17 @@ func TestSessionBackfillOnReinit(t *testing.T) { // 真实 Herdr：codex 的 ses
 		return e
 	}
 	owner := func(e *tenv, term, kind, sess string) {
-		e.rowSet(e.str("roles", "owner", "name"), e.str("roles", "owner", "pane"), term, kind, sess)
+		e.rowSet(e.str("roles", "O1", "name"), e.str("roles", "O1", "pane"), term, kind, sess)
 	}
 	t.Run("空补全为非空，之后变化即漂移", func(t *testing.T) {
 		e := setup(t)
 		prompts := e.count("agent", "prompt")
-		owner(e, e.str("roles", "owner", "identity", "terminal_id"), "codex", "sess-1")
+		owner(e, e.str("roles", "O1", "identity", "terminal_id"), "codex", "sess-1")
 		e.mustRun("init", "--team", e.teamID())
-		eq(t, e.str("roles", "owner", "identity", "session"), "sess-1", "session 已补全")
-		eq(t, e.str("roles", "owner", "stale"), "<nil>", "不标 stale")
+		eq(t, e.str("roles", "O1", "identity", "session"), "sess-1", "session 已补全")
+		eq(t, e.str("roles", "O1", "stale"), "<nil>", "不标 stale")
 		eq(t, e.count("agent", "prompt"), prompts, "无重发")
-		owner(e, e.str("roles", "owner", "identity", "terminal_id"), "codex", "sess-2")
+		owner(e, e.str("roles", "O1", "identity", "terminal_id"), "codex", "sess-2")
 		has(t, e.mustFail("init", "--team", e.teamID()), "stale", "补全后变化即漂移")
 	})
 	// terminal 变化且 pane/kind 相同：是 rebind 候选（重启后的常见情形）。init 只提示并拒绝，不标 stale，
@@ -799,21 +799,21 @@ func TestSessionBackfillOnReinit(t *testing.T) { // 真实 Herdr：codex 的 ses
 		e := setup(t)
 		owner(e, "term_changed", "codex", "sess-1")
 		has(t, e.mustFail("init", "--team", e.teamID()), "rebind", "提示显式 rebind")
-		eq(t, e.str("roles", "owner", "stale"), "<nil>", "不标 stale")
-		eq(t, e.str("roles", "owner", "identity", "session"), "", "不写入 session")
+		eq(t, e.str("roles", "O1", "stale"), "<nil>", "不标 stale")
+		eq(t, e.str("roles", "O1", "identity", "session"), "", "不写入 session")
 	})
 	t.Run("kind 变化仍 stale", func(t *testing.T) {
 		e := setup(t)
-		owner(e, e.str("roles", "owner", "identity", "terminal_id"), "claude", "sess-1")
+		owner(e, e.str("roles", "O1", "identity", "terminal_id"), "claude", "sess-1")
 		has(t, e.mustFail("init", "--team", e.teamID()), "stale", "拒绝补全")
-		eq(t, e.str("roles", "owner", "identity", "session"), "", "不写入 session")
+		eq(t, e.str("roles", "O1", "identity", "session"), "", "不写入 session")
 	})
 }
 
 func TestStaleIsNeverAutoCleared(t *testing.T) { // 已有 stale：无论补全条件成立还是身份严格匹配都保持
 	for name, tamper := range map[string]func(e *tenv){
 		"session 空→非空": func(e *tenv) {
-			e.rowSet(e.str("roles", "owner", "name"), e.str("roles", "owner", "pane"), e.str("roles", "owner", "identity", "terminal_id"), "codex", "sess-1")
+			e.rowSet(e.str("roles", "O1", "name"), e.str("roles", "O1", "pane"), e.str("roles", "O1", "identity", "terminal_id"), "codex", "sess-1")
 		},
 		"身份严格匹配": func(e *tenv) {},
 	} {
@@ -822,12 +822,12 @@ func TestStaleIsNeverAutoCleared(t *testing.T) { // 已有 stale：无论补全�
 			e.config("codex")
 			e.mustRun("up")
 			e.mustRun("init", "--team", e.teamID())
-			e.stateSet(func(m map[string]any) { dig(m, "roles", "owner").(map[string]any)["stale"] = true })
+			e.stateSet(func(m map[string]any) { dig(m, "roles", "O1").(map[string]any)["stale"] = true })
 			tamper(e)
 			prompts := e.count("agent", "prompt")
 			has(t, e.mustFail("init", "--team", e.teamID()), "stale", "保持 stale 并报错")
-			eq(t, e.str("roles", "owner", "stale"), "true", "stale 保持")
-			eq(t, e.str("roles", "owner", "identity", "session"), "", "identity 不变")
+			eq(t, e.str("roles", "O1", "stale"), "true", "stale 保持")
+			eq(t, e.str("roles", "O1", "identity", "session"), "", "identity 不变")
 			eq(t, e.count("agent", "prompt"), prompts, "无新 prompt")
 		})
 	}
@@ -866,8 +866,8 @@ func TestAuthorizationWaitAfterStartNotReady(t *testing.T) { // B1 / 裁决 1：
 	t.Setenv("NAKAMA_FAKE_STATUS_SEQ", "blocked,blocked,blocked,idle")
 	has(t, e.mustRun("up"), "等待授权", "提示等待授权")
 	eq(t, e.count("agent", "start"), 2, "owner/worker 各启动一次，agent_not_ready 不重试")
-	eq(t, e.str("roles", "owner", "launch_identity", "kind"), "codex", "授权结束后取得启动观测")
-	eq(t, e.str("roles", "owner", "identity", "kind"), "codex", "native 身份落盘")
+	eq(t, e.str("roles", "O1", "launch_identity", "kind"), "codex", "授权结束后取得启动观测")
+	eq(t, e.str("roles", "O1", "identity", "kind"), "codex", "native 身份落盘")
 }
 
 func TestAuthorizationWaitBounded(t *testing.T) { // B1：授权等待有上限，超时按失败路径处理并说明是授权超时
@@ -886,7 +886,7 @@ func TestCcSessionWaitSkipsBlockedWindow(t *testing.T) { // B1 cc / 裁决 3：b
 	t.Setenv("NAKAMA_FAKE_STATUS_SEQ", "unknown,blocked,blocked,blocked,blocked,blocked,idle")
 	t.Setenv("NAKAMA_FAKE_LATE_SESSION", "sess-late")
 	e.mustRun("up")
-	eq(t, e.str("roles", "owner", "launch_identity", "session"), "sess-late", "授权后取得启动观测中的 session")
+	eq(t, e.str("roles", "O1", "launch_identity", "session"), "sess-late", "授权后取得启动观测中的 session")
 }
 
 func TestAgentBlockedPromptKeepsRetryable(t *testing.T) { // B2：agent_blocked 确证未送达，清 pending，处理对话框后可重试
@@ -899,14 +899,14 @@ func TestAgentBlockedPromptKeepsRetryable(t *testing.T) { // B2：agent_blocked 
 	eq(t, e.str("pending"), "<nil>", "pending 已清空")
 	t.Setenv("FAKE_PROMPT_ERROR", "")
 	e.mustRun("init", "--team", id)
-	eq(t, e.str("roles", "owner", "inited"), "true", "重试后 owner 初始化成功，未被 pendingGuard 拦截")
+	eq(t, e.str("roles", "O1", "inited"), "true", "重试后 owner 初始化成功，未被 pendingGuard 拦截")
 }
 
 func TestInitFindsTeamFromRolePane(t *testing.T) { // B3：焦点在角色 pane 时 init 找到所属编组；多个编组命中须 --team
 	e := newEnv(t)
 	e.config("codex")
 	e.mustRun("up")
-	worker := e.str("roles", "worker", "pane")
+	worker := e.str("roles", "W1", "pane")
 	e.mustRun("init", "--pane", worker)
 	eq(t, e.str("phase"), "initialized", "角色 pane 上 init 完成")
 
@@ -928,7 +928,7 @@ func TestNativeDelayedBlocked(t *testing.T) { // R1：native 的首次有效观�
 	t.Setenv("NAKAMA_FAKE_STATUS_SEQ", "unknown,blocked")
 	e.run("up")
 	eq(t, e.count("agent", "start"), 1, "owner 仍 blocked 时不得完成取证并开始下一个角色")
-	eq(t, e.str("roles", "owner", "launch_identity"), "<nil>", "未等到授权前不写 launch_identity")
+	eq(t, e.str("roles", "O1", "launch_identity"), "<nil>", "未等到授权前不写 launch_identity")
 }
 
 func TestCcFirstObservationBlocked(t *testing.T) { // R1：手动引擎首次观测即 blocked 且 POLL_TRIES=1 时仍须等授权，不得冻结空 session
@@ -938,7 +938,7 @@ func TestCcFirstObservationBlocked(t *testing.T) { // R1：手动引擎首次观
 	t.Setenv("NAKAMA_FAKE_STATUS_SEQ", "unknown,blocked,idle")
 	t.Setenv("NAKAMA_FAKE_LATE_SESSION", "sess-after-authorization")
 	e.mustRun("up")
-	eq(t, e.str("roles", "owner", "launch_identity", "session"), "sess-after-authorization", "首次身份观测即 blocked 也必须等授权，不得冻结空 session")
+	eq(t, e.str("roles", "O1", "launch_identity", "session"), "sess-after-authorization", "首次身份观测即 blocked 也必须等授权，不得冻结空 session")
 }
 
 func TestSharedAuthorizationDeadline(t *testing.T) { // R2：同一角色的授权预算只有一份；中间的 unknown 不重置预算，提示只出现一次
@@ -966,8 +966,8 @@ func TestStaleCallerDoesNotInitOtherRoles(t *testing.T) { // R3：调用者角�
 	e := newEnv(t)
 	e.config("codex")
 	e.mustRun("up")
-	ownerName := e.str("roles", "owner", "name")
-	ownerPane := e.str("roles", "owner", "pane")
+	ownerName := e.str("roles", "O1", "name")
+	ownerPane := e.str("roles", "O1", "pane")
 	rows := readRows(e.log + ".names")
 	for i := range rows {
 		if rows[i].key == ownerName {
@@ -977,7 +977,7 @@ func TestStaleCallerDoesNotInitOtherRoles(t *testing.T) { // R3：调用者角�
 	writeRows(e.log+".names", rows)
 	e.mustFail("init", "--pane", ownerPane)
 	eq(t, e.count("agent", "prompt"), 0, "调用者已非该编组角色，自动定位必须在任何 prompt 前拒绝")
-	eq(t, e.str("roles", "worker", "inited"), "false", "其他角色未被初始化")
+	eq(t, e.str("roles", "W1", "inited"), "false", "其他角色未被初始化")
 }
 
 func TestCcBlockedPromptRetryNoDuplicateRename(t *testing.T) { // 控制：manual 角色已冻结后 agent_blocked 重试不得再次 rename
@@ -985,7 +985,7 @@ func TestCcBlockedPromptRetryNoDuplicateRename(t *testing.T) { // 控制：manua
 	e.rawConfig(`{"default_profile":{"owner":"cc","worker":"cc","advisor":"none"},"projects":{}}`)
 	e.mustRun("up")
 	id := e.teamID()
-	worker := e.str("roles", "worker", "name")
+	worker := e.str("roles", "W1", "name")
 	t.Setenv("FAKE_PROMPT_ERROR", "agent_blocked")
 	e.mustFail("init", "--team", id)
 	eq(t, e.str("pending"), "<nil>", "确定未发送时清 pending")
@@ -1008,7 +1008,7 @@ func TestNotReadyWithoutReadableIdentity(t *testing.T) { // 控制：agent_not_r
 	t.Setenv("NAKAMA_FAKE_GET_FAIL", "1")
 	e.mustFail("up")
 	eq(t, e.str("pending", "delivery"), "UNKNOWN", "启动错误但无法取证时 fail closed")
-	eq(t, e.str("roles", "owner", "identity"), "<nil>", "不冻结无证据身份")
+	eq(t, e.str("roles", "O1", "identity"), "<nil>", "不冻结无证据身份")
 	eq(t, e.count("agent", "prompt"), 0, "不误发 prompt")
 }
 
@@ -1034,15 +1034,15 @@ printf '{"result":{"agent":{"name":"","pane_id":"w0:p2","terminal_id":"term_p2",
 			t.Setenv("NAKAMA_START_POLL_TRIES", "3")
 			var out syncBuf
 			a := &app{stdout: &out, stderr: &out, st: store{dir: dir}}
-			tm := &Team{TeamID: "t1", Roles: Roles{Worker: &Role{Name: "x_execute", Engine: "cc", Pane: "w0:p2"}}}
-			if !a.captureIdentity(tm, "worker") {
+			tm := &Team{TeamID: "t1", Roles: map[string]*Role{"W1": {Name: "x_execute", Engine: "cc", Pane: "w0:p2"}}}
+			if !a.captureIdentity(tm, "W1") {
 				t.Fatal(out.String())
 			}
 			wantSession, wantReads := "", "3"
 			if middle {
 				wantSession, wantReads = "late", "7"
 			}
-			eq(t, tm.Roles.Worker.LaunchIdentity.Session, wantSession, "只计算稳定观测；blocked 读数不消耗 session 窗口")
+			eq(t, tm.role("W1").LaunchIdentity.Session, wantSession, "只计算稳定观测；blocked 读数不消耗 session 窗口")
 			raw, _ := os.ReadFile(bin + ".count")
 			eq(t, strings.TrimSpace(string(raw)), wantReads, "观测次数")
 		})

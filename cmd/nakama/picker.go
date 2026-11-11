@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -166,11 +167,22 @@ func (a *app) cmdPick(args []string) error {
 	if err != nil {
 		return err
 	}
+	nWorkers, err := a.askCount("Worker")
+	if err != nil {
+		return err
+	}
 	advisor, err := a.askEngine(cfg, "advisor", "Advisor", true, "")
 	if err != nil {
 		return err
 	}
-	a.outf(L("\n将以 pane %s（cwd %s）为锚点建组：\n  Owner   %s\n  Worker  %s\n  Advisor %s\n确认建组？[y/N] "), a.anchor.PaneID, a.anchor.CWD, owner, worker, advisor)
+	nAdvisors := 0
+	if advisor != "none" {
+		if nAdvisors, err = a.askCount("Advisor"); err != nil {
+			return err
+		}
+	}
+	a.outf(L("\n将以 pane %s（cwd %s）为锚点建组：\n  Owner   %s\n  Worker  %s\n  Advisor %s\n确认建组？[y/N] "),
+		a.anchor.PaneID, a.anchor.CWD, owner, scaledEngine(worker, nWorkers), scaledEngine(advisor, nAdvisors))
 	ans, err := a.readLine()
 	if err != nil {
 		return a.fail(L("输入结束，已取消（未创建任何内容）。"))
@@ -180,10 +192,39 @@ func (a *app) cmdPick(args []string) error {
 		return nil
 	}
 
+	upArgs := []string{"--owner", owner, "--worker", worker, "--workers", strconv.Itoa(nWorkers), "--advisor", advisor, "--pane", a.anchor.PaneID, "--cwd", a.anchor.CWD}
+	if advisor != "none" {
+		upArgs = append(upArgs, "--advisors", strconv.Itoa(nAdvisors))
+	}
 	a.createOnly = true
 	return a.guarded(func() error {
-		return a.cmdUp([]string{"--owner", owner, "--worker", worker, "--advisor", advisor, "--pane", a.anchor.PaneID, "--cwd", a.anchor.CWD})
+		return a.cmdUp(upArgs)
 	}, L("\n建组完成。\n"), L("\n建组失败，见上方信息。\n"))
+}
+
+// 数量输入：回车取默认 1；非法输入重问；EOF 取消。
+func (a *app) askCount(label string) (int, error) {
+	for {
+		a.outf(L("%s 数量 [默认 1]: "), label)
+		in, err := a.readLine()
+		if err != nil {
+			return 0, a.fail(L("输入结束，已取消（未创建任何内容）。"))
+		}
+		if in == "" {
+			return 1, nil
+		}
+		if n, err := strconv.Atoi(in); err == nil && n >= 1 && n <= maxPerRole {
+			return n, nil
+		}
+		a.outf(L("数量须为 1-%d 的整数。\n"), maxPerRole)
+	}
+}
+
+func scaledEngine(eng string, n int) string {
+	if n == 0 {
+		return eng
+	}
+	return fmt.Sprintf("%s ×%d", eng, n)
 }
 
 // overlay 内执行有副作用的命令：执行期间才启用 stop-flag 语义；输入阶段让默认信号处理直接终止进程。
@@ -209,70 +250,111 @@ func (a *app) guarded(run func() error, okMsg, failMsg string) error {
 	return runErr
 }
 
-// 已有编组的管理菜单：增减 Advisor、替换 Worker / Advisor、清理任务目录。引擎仍在创建时冻结，换模型即替换实例。
+// askInstance：同类只有一个成员时直接返回；多个时让用户输入成员键（如 W2）。
+func (a *app) askInstance(t *Team, kind string) (string, error) {
+	keys := t.membersOf(kind)
+	if len(keys) == 1 {
+		return keys[0], nil
+	}
+	a.outf(L("选择实例（%s）: "), strings.Join(keys, " / "))
+	in, err := a.readLine()
+	if err != nil {
+		return "", a.fail(L("输入结束，已取消（未创建任何内容）。"))
+	}
+	key := strings.ToUpper(in)
+	if t.role(key) == nil || kindOf(key) != kind {
+		return "", a.pickReject(L("未知实例：%s"), in)
+	}
+	return key, nil
+}
+
+// 已有编组的管理菜单：增减与替换 Worker / Advisor、清理任务目录。引擎仍在创建时冻结，换模型即替换实例。
 func (a *app) teamMenu(cfg *config, id string) error {
 	t, err := a.st.load(id)
 	if err != nil {
 		return a.pickReject("%v", err)
 	}
 	a.outf(L("\n编组 %s（phase=%s，锚点 pane %s）：\n"), id, t.Phase, t.Anchor.PaneID)
-	for _, rn := range roleOrder {
-		if r := t.role(rn); r != nil {
-			a.outf("  %-7s %s\n", rn, r.Engine)
+	for _, key := range t.members() {
+		r := t.role(key)
+		pane := string(r.Pane)
+		if pane == "" {
+			pane = "?"
 		}
+		a.outf("  %-4s %-7s %s pane=%s\n", key, kindOf(key), r.Engine, pane)
 	}
 	a.outf("\n")
-	if t.hasAdvisor() {
-		a.outf("%s", L("  x  移除 Advisor\n  v  替换 Advisor\n"))
-	} else {
-		a.outf("%s", L("  a  添加 Advisor\n"))
+	// 添加 / 替换 / 移除按显式选项区分；数量上限与最少人数在这里即判定可用性。
+	nW, nA := len(t.membersOf("worker")), len(t.membersOf("advisor"))
+	menu := []struct {
+		key, text string
+		ok        bool
+	}{
+		{"a", L("  a  添加 Advisor\n"), nA < maxPerRole},
+		{"n", L("  n  添加 Worker\n"), nW < maxPerRole},
+		{"x", L("  x  移除 Advisor\n"), nA >= 1},
+		{"r", L("  r  移除 Worker\n"), nW > 1},
+		{"v", L("  v  替换 Advisor\n"), nA >= 1},
+		{"w", L("  w  替换 Worker（旧 pane 保留，请先确认它已停止写入）\n"), nW >= 1},
+		{"c", L("  c  清理任务目录\n"), true},
 	}
-	a.outf("%s", L("  w  替换 Worker（旧 pane 保留，请先确认它已停止写入）\n  c  清理任务目录\n选择 [回车关闭]: "))
+	enabled := map[string]bool{}
+	for _, m := range menu {
+		if m.ok {
+			enabled[m.key] = true
+			a.outf("%s", m.text)
+		}
+	}
+	a.outf("%s", L("选择 [回车关闭]: "))
 	in, err := a.readLine()
 	if err != nil {
 		return a.fail(L("输入结束，已取消（未创建任何内容）。"))
 	}
-	var run func() error
-	role, label := "", ""
-	switch strings.ToLower(in) {
-	case "":
+	choice := strings.ToLower(in)
+	if choice == "" {
 		return nil
-	case "c":
+	}
+	if choice == "c" {
 		return a.guarded(func() error { return a.cmdClean([]string{"--team", id}) }, "", "")
-	case "x":
-		if !t.hasAdvisor() {
-			return a.pickReject(L("未知选项：%s"), in)
-		}
-		run = func() error { return a.cmdDrop([]string{"--team", id}) }
-	case "a":
-		if t.hasAdvisor() {
-			return a.pickReject(L("未知选项：%s"), in)
-		}
-		role, label = "advisor", "Advisor"
-	case "v":
-		if !t.hasAdvisor() {
-			return a.pickReject(L("未知选项：%s"), in)
-		}
-		role, label = "advisor", "Advisor"
-	case "w":
-		role, label = "worker", "Worker"
-	default:
+	}
+	if !enabled[choice] {
 		return a.pickReject(L("未知选项：%s"), in)
 	}
-	summary := L("移除 Advisor")
-	if role != "" {
-		def := ""
-		if r := t.role(role); r != nil {
-			def = r.Engine
-		}
-		eng, err := a.askEngine(cfg, role, label, false, def)
+	kind, label := "advisor", "Advisor"
+	if choice == "n" || choice == "r" || choice == "w" {
+		kind, label = "worker", "Worker"
+	}
+	var run func() error
+	var summary string
+	switch choice {
+	case "a", "n":
+		eng, err := a.askEngine(cfg, kind, label, false, "")
 		if err != nil {
 			return err
 		}
 		summary = label + " → " + eng
-		run = func() error { return a.cmdSwap([]string{"--team", id, "--role", role, "--engine", eng}) }
-		if t.role(role) == nil {
-			run = func() error { return a.cmdAdd([]string{"--team", id, "--engine", eng}) }
+		run = func() error { return a.cmdAdd([]string{"--team", id, "--role", kind, "--engine", eng}) }
+	case "x", "r":
+		key, err := a.askInstance(t, kind)
+		if err != nil {
+			return err
+		}
+		summary = L("移除 ") + key
+		run = func() error {
+			return a.cmdDrop([]string{"--team", id, "--role", kind, "--instance", strconv.Itoa(keyInstance(key))})
+		}
+	case "v", "w":
+		key, err := a.askInstance(t, kind)
+		if err != nil {
+			return err
+		}
+		eng, err := a.askEngine(cfg, kind, label, false, t.role(key).Engine)
+		if err != nil {
+			return err
+		}
+		summary = L("替换 ") + key + " → " + eng
+		run = func() error {
+			return a.cmdSwap([]string{"--team", id, "--role", kind, "--instance", strconv.Itoa(keyInstance(key)), "--engine", eng})
 		}
 	}
 	a.outf(L("\n将变更编组 %s：%s\n确认？[y/N] "), id, summary)
