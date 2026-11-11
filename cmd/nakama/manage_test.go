@@ -153,9 +153,12 @@ func TestChangeResumeAfterInterruptedLaunch(t *testing.T) {
 	})
 	e.rowDel("@" + pane)
 	has(t, e.mustFail("init", "--team", id), "phase=changing", "变更未完成时 init 拒绝")
+	has(t, e.mustFail("drop", "--team", id), "add / swap 或 up", "drop 指向补齐入口")
 	runs := e.count("pane", "run")
-	e.mustRun("up")
-	eq(t, e.count("pane", "run"), runs+1, "up 补齐启动")
+	// swap 遇到未完成变更：补齐上一次，本次不执行
+	has(t, e.mustFail("swap", "--team", id, "--role", "worker"), "本次请求未执行", "不静默执行别的操作")
+	eq(t, e.count("pane", "run"), runs+1, "补齐启动")
+	eq(t, e.str("roles", "worker", "instance"), "1", "本次 swap 未执行")
 	eq(t, e.count("pane", "split"), 3, "不重复 split")
 	eq(t, e.str("phase"), "launched", "补齐后 launched")
 	e.mustRun("init", "--team", id)
@@ -186,6 +189,7 @@ func TestCleanTaskDirs(t *testing.T) {
 	e.config("normal")
 	e.mustRun("up")
 	id := e.teamID()
+	e.mustRun("init", "--team", id)
 	dir := e.str("task_dir")
 	mk := func(task string) {
 		os.MkdirAll(filepath.Join(dir, task), 0o700)
@@ -225,14 +229,21 @@ func TestCleanTaskDirs(t *testing.T) {
 	if !ok || !exists(filepath.Join(dir, "op_2")) {
 		t.Fatalf("未确认不得删除：\n%s", out)
 	}
-	ok, out = e.runIn("1\ny\n", "clean")
+	ok, out = e.runIn("1 1\ny\n", "clean") // 重复编号只删一次，不报错
 	if !ok || exists(filepath.Join(dir, "op_2")) || !exists(filepath.Join(dir, "op_3")) {
 		t.Fatalf("确认后只删选中项：\n%s", out)
 	}
 	withTTY(t, false)
 
+	// 在册角色状态查不到（Herdr 不可用）：按忙碌处理
+	t.Setenv("NAKAMA_FAKE_GET_FAIL", "1")
+	has(t, e.mustFail("clean", "--all", "--yes"), "无法确认", "状态未知不清理")
+	t.Setenv("NAKAMA_FAKE_GET_FAIL", "")
+	if !exists(filepath.Join(dir, "op_3")) {
+		t.Fatal("状态未知不得删除")
+	}
+
 	// Worker 仍在执行：默认拒绝，--force 才删
-	e.mustRun("init", "--team", id)
 	t.Setenv("FAKE_STATUS", "working")
 	has(t, e.mustFail("clean", "--all", "--yes"), "任务目录仍可能在使用", "执行中默认不清理")
 	if !exists(filepath.Join(dir, "op_3")) {
@@ -250,6 +261,20 @@ func TestCleanTaskDirs(t *testing.T) {
 	has(t, e.mustRun("clean", "--all", "--yes"), "没有可清理的任务目录", "非记录路径不清理")
 	if !exists(filepath.Join(outside, "keep.txt")) || !exists(filepath.Join(dir, "op_4")) {
 		t.Fatal("被篡改的 task_dir 不得用于删除")
+	}
+}
+
+func TestTaskDirRefusesSymlink(t *testing.T) {
+	e := newEnv(t)
+	e.config("normal")
+	outside := filepath.Join(e.root, "outside")
+	os.MkdirAll(outside, 0o700)
+	os.Symlink(outside, filepath.Join(e.proj, ".nakama"))
+	out := e.mustRun("up")
+	has(t, out, "不是真实目录", "提示符号链接")
+	eq(t, e.str("task_dir"), "<nil>", "不记录任务目录")
+	if ents, _ := os.ReadDir(outside); len(ents) != 0 {
+		t.Fatalf("不得写到项目外：%v", ents)
 	}
 }
 
@@ -300,6 +325,28 @@ func TestSchemaGuardsNewFields(t *testing.T) {
 	// 去掉新字段的 schema 2 仍可读，且不会凭空得到任务目录
 	e.stateSet(func(m map[string]any) { delete(m, "task_dir") })
 	hasNot(t, e.mustRun("status", "--team", id), "task_dir=", "旧组没有任务目录")
+	for _, f := range []func(m map[string]any){
+		func(m map[string]any) { m["phase"] = "changing" },
+		func(m map[string]any) { dig(m, "roles", "worker").(map[string]any)["team_update_pending"] = true },
+	} {
+		e.stateSet(f)
+		has(t, e.mustFail("status", "--team", id), "状态文件校验失败", "schema 2 不得带 schema 3 字段")
+		e.stateSet(func(m map[string]any) {
+			m["phase"] = "launched"
+			delete(dig(m, "roles", "worker").(map[string]any), "team_update_pending")
+		})
+	}
+	// changing 中 Owner 也必须有 pane（Owner 不可变更）
+	ownerPane := e.str("roles", "owner", "pane")
+	e.stateSet(func(m map[string]any) {
+		m["schema_version"], m["phase"] = 3, "changing"
+		dig(m, "roles", "owner").(map[string]any)["pane"] = nil
+	})
+	has(t, e.mustFail("status", "--team", id), "状态文件校验失败", "changing 下 Owner 无 pane 视为损坏")
+	e.stateSet(func(m map[string]any) {
+		m["schema_version"], m["phase"] = 2, "launched"
+		dig(m, "roles", "owner").(map[string]any)["pane"] = ownerPane
+	})
 	e.mustRun("init", "--team", id)
 	eq(t, e.str("schema_version"), "3", "保存后升级")
 	hasNot(t, e.lastPrompt(id+"_design"), "任务目录=", "旧组 prompt 不提任务目录")

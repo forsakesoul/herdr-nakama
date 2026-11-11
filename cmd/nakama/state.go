@@ -495,6 +495,9 @@ func validateTeam(raw []byte) error {
 	default:
 		return bad
 	}
+	if v < schemaVersion && phase == "changing" {
+		return bad
+	}
 	roles, ok := t["roles"].(map[string]any)
 	if !ok {
 		return bad
@@ -512,12 +515,12 @@ func validateTeam(raw []byte) error {
 			return bad
 		}
 	}
-	for _, rv := range roles {
+	for rn, rv := range roles {
 		if rv == nil {
 			continue
 		}
 		r, ok := rv.(map[string]any)
-		if !ok {
+		if !ok || (v < schemaVersion && r["team_update_pending"] != nil) {
 			return bad
 		}
 		inst, isNum := r["instance"].(float64)
@@ -530,7 +533,8 @@ func validateTeam(raw []byte) error {
 		if pane != nil && !nonEmptyStr(pane) {
 			return bad
 		}
-		if phase != "starting" && phase != "changing" && pane == nil {
+		// changing 只允许被新增/替换的 Worker / Advisor 尚无 pane；Owner 不可变更。
+		if pane == nil && phase != "starting" && (phase != "changing" || rn == "owner") {
 			return bad
 		}
 		if r["inited"] == true && r["identity"] == nil {

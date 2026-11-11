@@ -238,10 +238,7 @@ func (a *app) teamMenu(cfg *config, id string) error {
 	case "":
 		return nil
 	case "c":
-		err := a.cmdClean([]string{"--team", id})
-		a.unlockAll()
-		a.waitEnter()
-		return err
+		return a.guarded(func() error { return a.cmdClean([]string{"--team", id}) }, "", "")
 	case "x":
 		if !t.hasAdvisor() {
 			return a.pickReject(L("未知选项：%s"), in)

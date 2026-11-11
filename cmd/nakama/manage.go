@@ -117,7 +117,7 @@ func (a *app) cmdAdd(args []string) error {
 		return err
 	}
 	if t.Phase == "changing" {
-		return a.resumeChange(t)
+		return a.finishPrevious(t)
 	}
 	if t.Phase != "initialized" {
 		return a.fail(L("编组 %s 尚未完成初始化（phase=%s）；先 init 再变更。"), t.TeamID, t.Phase)
@@ -142,7 +142,7 @@ func (a *app) cmdSwap(args []string) error {
 		return err
 	}
 	if t.Phase == "changing" {
-		return a.resumeChange(t)
+		return a.finishPrevious(t)
 	}
 	if t.Phase != "initialized" {
 		return a.fail(L("编组 %s 尚未完成初始化（phase=%s）；先 init 再变更。"), t.TeamID, t.Phase)
@@ -188,9 +188,18 @@ func (a *app) changeRole(t *Team, cfg *config, rn, cliEngine string) error {
 	return a.resumeChange(t)
 }
 
-// 补齐变更中缺失的 split / 启动步骤；失败后重跑同一命令或 up 继续。
+// 上一次 add / swap 中断：先补齐它，本次参数不执行，补齐后由用户重跑。
+func (a *app) finishPrevious(t *Team) error {
+	a.warnf(L("编组 %s 有未完成的变更，先补齐它；本次请求未执行，补齐后请重跑。"), t.TeamID)
+	if err := a.resumeChange(t); err != nil {
+		return err
+	}
+	return errExit
+}
+
+// 补齐变更中缺失的 split / 启动步骤；失败后重跑同一命令或 up 继续。Owner 不可变更，不在补齐范围。
 func (a *app) resumeChange(t *Team) error {
-	for _, rn := range roleOrder {
+	for _, rn := range []string{"worker", "advisor"} {
 		if r := t.role(rn); r != nil && (r.Pane == "" || !r.Launched) {
 			if err := a.ensureRole(t, rn); err != nil {
 				a.errf(L("编组变更未完成；核对后重跑同一命令或 up 继续。"))
@@ -215,6 +224,9 @@ func (a *app) cmdDrop(args []string) error {
 	t, _, err := a.openChange(first(v["--team"]), "drop", false)
 	if err != nil {
 		return err
+	}
+	if t.Phase == "changing" {
+		return a.fail(L("编组 %s 的变更尚未完成（phase=changing）；先重跑 add / swap 或 up 补齐，再 init。"), t.TeamID)
 	}
 	if t.Phase != "initialized" && t.Phase != "launched" {
 		return a.fail(L("编组 %s 尚未完成初始化（phase=%s）；先 init 再变更。"), t.TeamID, t.Phase)
@@ -303,6 +315,13 @@ func taskDirFor(t *Team) string { return filepath.Join(t.CWD, ".nakama", t.TeamI
 
 func (a *app) createTaskDir(t *Team) error {
 	dir := taskDirFor(t)
+	// 仓库里可能预置 .nakama 符号链接：跟随会把目录和 .gitignore 建到项目外，且之后 clean 也删不了。
+	for _, p := range []string{filepath.Dir(dir), dir} {
+		if _, err := os.Lstat(p); err == nil && !realDir(p) {
+			a.warnf(L("%s 不是真实目录（可能是符号链接）；本编组不使用任务目录，正文仍内联在消息里。"), p)
+			return nil
+		}
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return a.fail(L("无法创建任务目录 %s：%v"), dir, err)
 	}
@@ -467,7 +486,12 @@ func (a *app) cmdClean(args []string) error {
 
 	failed := false
 	locked := map[string]*Team{}
+	done := map[row]bool{}
 	for _, r := range picked {
+		if done[r] {
+			continue
+		}
+		done[r] = true
 		t, seen := locked[r.team]
 		if !seen {
 			// 锁内重读：与正在 init / 变更的进程互斥；Worker / Advisor 仍在执行时目录是恢复依据，默认不删。
@@ -477,18 +501,8 @@ func (a *app) cmdClean(args []string) error {
 					t = nil
 				}
 			}
-			if t != nil && !force {
-				for _, rn := range []string{"worker", "advisor"} {
-					role := t.role(rn)
-					if role == nil {
-						continue
-					}
-					if o, ok := a.agentGet(role.Name); ok && (o.AgentStatus == "working" || o.AgentStatus == "blocked") {
-						a.errf(L("%s 当前状态为 %s；任务目录仍可能在使用，未清理编组 %s（确需清理加 --force）。"), role.Name, o.AgentStatus, r.team)
-						t = nil
-						break
-					}
-				}
+			if t != nil && !force && !a.tasksIdle(t) {
+				t = nil
 			}
 			locked[r.team] = t
 		}
@@ -501,8 +515,13 @@ func (a *app) cmdClean(args []string) error {
 			ok = ok || k.name == r.task
 		}
 		p := filepath.Join(t.TaskDir, r.task)
-		if !ok || !realDir(p) || os.RemoveAll(p) != nil {
+		if !ok || !realDir(p) {
 			a.errf(L("任务目录不存在：%s"), r.task)
+			failed = true
+			continue
+		}
+		if err := os.RemoveAll(p); err != nil {
+			a.errf("%v", err)
 			failed = true
 			continue
 		}
@@ -512,4 +531,34 @@ func (a *app) cmdClean(args []string) error {
 		return errExit
 	}
 	return nil
+}
+
+// 任务目录的写入者（在册与已停用的 Worker / Advisor）都不在执行才可清理。在册角色状态查不到（Herdr 不可用、
+// 改名丢失）按忙碌处理；已停用实例的 pane 可能已被用户关闭，查不到视为已停止。Owner 正是执行 clean 的一方，不检查。
+func (a *app) tasksIdle(t *Team) bool {
+	type w struct {
+		name    string
+		retired bool
+	}
+	var ws []w
+	for _, rn := range []string{"worker", "advisor"} {
+		if r := t.role(rn); r != nil {
+			ws = append(ws, w{r.Name, false})
+		}
+	}
+	for _, x := range t.Retired {
+		ws = append(ws, w{x.Name, true})
+	}
+	for _, x := range ws {
+		o, ok := a.agentGet(x.name)
+		switch {
+		case !ok && !x.retired:
+			a.errf(L("无法确认 %s 的状态；任务目录仍可能在使用，未清理编组 %s（确需清理加 --force）。"), x.name, t.TeamID)
+			return false
+		case ok && (o.AgentStatus == "working" || o.AgentStatus == "blocked"):
+			a.errf(L("%s 当前状态为 %s；任务目录仍可能在使用，未清理编组 %s（确需清理加 --force）。"), x.name, o.AgentStatus, t.TeamID)
+			return false
+		}
+	}
+	return true
 }
