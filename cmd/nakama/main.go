@@ -1,4 +1,4 @@
-// nakama：Owner/Worker/Advisor 编组的 Herdr 原生插件（up / init / status / rebind / pick）。
+// nakama：Owner/Worker/Advisor 编组的 Herdr 原生插件（up / init / status / rebind / pick / add / drop / swap / clean）。
 package main
 
 import (
@@ -81,7 +81,11 @@ const usageText = `nakama — Herdr 原生编组插件（Owner / Worker / Adviso
   nakama rebind --team <id> [--preflight | --discard-pending]
                        [--confirm-session <owner|worker|advisor|anchor>=<session>]...
                        [--confirm-anchor <terminal>]   # 电脑/Herdr 重启后显式重绑，见 README
-  nakama pick                   # 交互选择三角色引擎并建组（overlay 内运行，经 pick action 打开）
+  nakama pick                   # 交互选择三角色引擎并建组；已有编组时为管理菜单（overlay 内运行，经 pick action 打开）
+  nakama add --team <id> [--engine E]                         # 中途加入独立 Advisor
+  nakama drop --team <id>                                     # 移除独立 Advisor
+  nakama swap --team <id> --role worker|advisor [--engine E]  # 替换角色实例（旧 pane 保留）
+  nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]  # 列出 / 清理任务目录
 
 引擎写法：<launcher>/<model>[:effort]，或 config.json 中 default_profile.engine_map 的简写。
 配置：$HERDR_PLUGIN_CONFIG_DIR/config.json，或 ${XDG_CONFIG_HOME:-$HOME/.config}/nakama/config.json
@@ -105,6 +109,14 @@ func (a *app) dispatch(args []string) error {
 		return a.cmdOpenPicker(args)
 	case "pick":
 		return a.cmdPick(args)
+	case "add":
+		return a.cmdAdd(args)
+	case "drop":
+		return a.cmdDrop(args)
+	case "swap":
+		return a.cmdSwap(args)
+	case "clean":
+		return a.cmdClean(args)
 	case "", "-h", "--help", "help":
 		io.WriteString(a.stdout, L(usageText))
 		return nil

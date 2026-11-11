@@ -369,6 +369,9 @@ func (a *app) cmdUp(args []string) error {
 	if err := a.captureAnchorIdentity(t); err != nil {
 		return err
 	}
+	if err := a.createTaskDir(t); err != nil {
+		return err
+	}
 
 	adv := advisorEng
 	if adv == "" {
@@ -440,6 +443,12 @@ func (a *app) upExisting(id string) error {
 		}
 		return a.resumeHalf(t)
 	}
+	if t.Phase == "changing" {
+		if err := a.checkVersions(t); err != nil {
+			return err
+		}
+		return a.resumeChange(t)
+	}
 	a.outf(L("已存在本 anchor 的编组 %s（phase=%s）；不重复创建。\n"), id, t.Phase)
 	a.printNext(t)
 	return nil
@@ -475,45 +484,11 @@ func (a *app) resumeHalf(t *Team) error {
 		return a.fail(L("半组状态不安全（已建角色身份核验失败）。人工核验步骤：对每个角色执行 herdr agent get/read，确认 pane/实例后重建或重新 up；不自动继续。"))
 	}
 	for _, rn := range roleOrder {
-		r := t.role(rn)
-		if r == nil {
+		if t.role(rn) == nil {
 			continue
 		}
-		created := false
-		if r.Pane == "" {
-			base, dir := a.anchor.PaneID, "right"
-			if rn == "worker" {
-				dir = "down"
-			}
-			if rn == "advisor" {
-				if base = string(t.Roles.Owner.Pane); base == "" {
-					return a.fail(L("半组恢复失败：advisor 需要先有 owner pane。人工核验后重建。"))
-				}
-				dir = "down"
-			}
-			if !a.requireEngine(r.Engine) {
-				return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), rn)
-			}
-			if _, err := a.runSplit(t, rn, base, dir); err != nil {
-				return a.fail(L("半组恢复：%s split 失败。核对后重跑 up。"), rn)
-			}
-			created = true
-		}
-		if !r.Launched {
-			if !created {
-				if state, code := a.paneOccupancy(string(r.Pane)); state != "idle" {
-					if code == "" {
-						code = "n/a"
-					}
-					return a.fail(L("半组恢复：%s pane %s 占用状态=%s（原始分类 %s）；拒绝启动，请人工核对。"), rn, r.Pane, state, code)
-				}
-			}
-			if !a.requireEngine(r.Engine) {
-				return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), rn)
-			}
-			if err := a.runLaunch(t, rn); err != nil {
-				return a.fail(L("半组恢复：%s 启动失败。核对 get/read 后重跑 up。"), rn)
-			}
+		if err := a.ensureRole(t, rn); err != nil {
+			return err
 		}
 	}
 	t.Phase = "launched"
@@ -522,6 +497,48 @@ func (a *app) resumeHalf(t *Team) error {
 	}
 	a.outf("%s", L("半组恢复完成（继续缺失步骤，不重复已建角色）。\n"))
 	a.printNext(t)
+	return nil
+}
+
+// 补齐单个角色的缺失步骤（split / 启动）；半组恢复与编组变更（add / swap）共用。
+func (a *app) ensureRole(t *Team, rn string) error {
+	r := t.role(rn)
+	created := false
+	if r.Pane == "" {
+		base, dir := a.anchor.PaneID, "right"
+		if rn == "worker" {
+			dir = "down"
+		}
+		if rn == "advisor" {
+			if base = string(t.Roles.Owner.Pane); base == "" {
+				return a.fail(L("半组恢复失败：advisor 需要先有 owner pane。人工核验后重建。"))
+			}
+			dir = "down"
+		}
+		if !a.requireEngine(r.Engine) {
+			return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), rn)
+		}
+		if _, err := a.runSplit(t, rn, base, dir); err != nil {
+			return a.fail(L("半组恢复：%s split 失败。核对后重跑 up。"), rn)
+		}
+		created = true
+	}
+	if !r.Launched {
+		if !created {
+			if state, code := a.paneOccupancy(string(r.Pane)); state != "idle" {
+				if code == "" {
+					code = "n/a"
+				}
+				return a.fail(L("半组恢复：%s pane %s 占用状态=%s（原始分类 %s）；拒绝启动，请人工核对。"), rn, r.Pane, state, code)
+			}
+		}
+		if !a.requireEngine(r.Engine) {
+			return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), rn)
+		}
+		if err := a.runLaunch(t, rn); err != nil {
+			return a.fail(L("半组恢复：%s 启动失败。核对 get/read 后重跑 up。"), rn)
+		}
+	}
 	return nil
 }
 
@@ -565,23 +582,9 @@ func (a *app) cmdInit(args []string) error {
 			*dst = args[i]
 		}
 	}
-	id := cliTeam
-	if id == "" {
-		if err := a.normalizeAnchor(cliPane, cliCwd); err != nil {
-			return err
-		}
-		// 焦点在角色 pane 时同样能定位所属编组；多个命中须用 --team 消歧，避免误选。
-		ids := a.st.findByPane(a.anchor.PaneID)
-		switch {
-		case len(ids) == 0:
-			return a.fail(L("未指定 --team，且当前 pane 不属于任何编组。"))
-		case len(ids) > 1:
-			return a.fail(L("当前 pane 同时属于多个编组（%s），请用 --team 指定。"), strings.Join(ids, ", "))
-		}
-		id = ids[0]
-	}
-	if !a.st.exists(id) {
-		return a.fail(L("编组不存在：%s"), id)
+	id, err := a.resolveTeam(cliTeam, cliPane, cliCwd)
+	if err != nil {
+		return err
 	}
 	if err := a.lock("team-"+id, "init"); err != nil {
 		return err
@@ -592,6 +595,9 @@ func (a *app) cmdInit(args []string) error {
 	}
 	if !a.pendingGuard(t) {
 		return a.fail(L("编组 %s 有未确认副作用（UNKNOWN），不重发；请人工 get/read 核对。"), id)
+	}
+	if t.Phase == "changing" {
+		return a.fail(L("编组 %s 的变更尚未完成（phase=changing）；先重跑 add / swap 或 up 补齐，再 init。"), id)
 	}
 	if err := a.checkVersions(t); err != nil {
 		return err
@@ -656,6 +662,11 @@ func (a *app) cmdInit(args []string) error {
 		}
 	}
 
+	// 新角色就绪后才通知其余角色；未能投递的保留标记，下次 init 再投。
+	if !a.deliverTeamUpdates(t) {
+		overall = false
+	}
+
 	ready := overall
 	for _, rn := range roleOrder {
 		if r := t.role(rn); r != nil && (!r.Inited || r.Stale) {
@@ -675,6 +686,28 @@ func (a *app) cmdInit(args []string) error {
 		return errExit
 	}
 	return nil
+}
+
+// --team 优先；否则按锚点或角色 pane 定位，多个命中须用 --team 消歧，避免误选。
+func (a *app) resolveTeam(cliTeam, cliPane, cliCwd string) (string, error) {
+	id := cliTeam
+	if id == "" {
+		if err := a.normalizeAnchor(cliPane, cliCwd); err != nil {
+			return "", err
+		}
+		ids := a.st.findByPane(a.anchor.PaneID)
+		switch {
+		case len(ids) == 0:
+			return "", a.fail(L("未指定 --team，且当前 pane 不属于任何编组。"))
+		case len(ids) > 1:
+			return "", a.fail(L("当前 pane 同时属于多个编组（%s），请用 --team 指定。"), strings.Join(ids, ", "))
+		}
+		id = ids[0]
+	}
+	if !a.st.exists(id) {
+		return "", a.fail(L("编组不存在：%s"), id)
+	}
+	return id, nil
 }
 
 // 角色 pane 自动选组的调用者核验（只读）：已冻结角色沿用 verifyIdentity（inited 且 session 为空时允许 fillSession 补全），
@@ -867,7 +900,23 @@ func (a *app) statusTeam(t *Team) {
 			st = o.AgentStatus
 		}
 		candidate = candidate || label == "candidate"
-		a.outf("  %-7s name=%s pane=%s engine=%s inited=%t stale=%t status=%s binding=%s\n", rn, r.Name, pane, r.Engine, r.Inited, r.Stale, st, label)
+		upd := ""
+		if r.TeamUpdate {
+			upd = " team_update=pending"
+		}
+		a.outf("  %-7s name=%s pane=%s engine=%s inited=%t stale=%t status=%s binding=%s%s\n", rn, r.Name, pane, r.Engine, r.Inited, r.Stale, st, label, upd)
+	}
+	for _, x := range t.Retired {
+		a.outf("  retired %s%d name=%s pane=%s engine=%s op=%s\n", strings.ToUpper(x.Role[:1]), x.Instance, x.Name, x.Pane, x.Engine, x.Op)
+	}
+	if t.TaskDir != "" {
+		tasks := a.listTasks(t)
+		var files int
+		var size int64
+		for _, k := range tasks {
+			files, size = files+k.files, size+k.size
+		}
+		a.outf("  task_dir=%s tasks=%d files=%d size=%s\n", t.TaskDir, len(tasks), files, humanSize(size))
 	}
 	if candidate {
 		a.outf(L("  提示：存在 candidate（同 pane/kind 的候选，不保证可重绑）：可能需要显式 rebind --team %s，请先 --preflight 核对；status 不改动状态。\n"), t.TeamID)

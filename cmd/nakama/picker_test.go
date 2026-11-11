@@ -188,7 +188,7 @@ func TestPickExistingTeamShowsFrozenEngines(t *testing.T) { // e
 	}
 	has(t, out, e.teamID(), "显示现有组")
 	has(t, out, "codex/gpt-6.1-sol:high", "显示冻结引擎")
-	has(t, out, "不能在原锚点换模型", "说明")
+	has(t, out, "选择 [回车关闭]", "进入管理菜单")
 	hasNot(t, out, "引擎 [默认", "不再询问")
 	eq(t, e.count("pane", "split"), splits, "零新增副作用")
 }

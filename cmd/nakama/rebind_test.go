@@ -155,7 +155,7 @@ func TestRebindRestartedStableTeam(t *testing.T) {
 	eq(t, e.str("roles", "owner", "launch_identity", "terminal_id"), origOwnerTerm, "launch_identity 保留历史")
 	eq(t, e.str("anchor", "terminal_id"), "term_new_anchor", "锚点 terminal 已更新")
 	eq(t, e.str("team_rev"), "2", "提交后 team_rev+1")
-	eq(t, e.str("schema_version"), "2", "写出 schema 2")
+	eq(t, e.str("schema_version"), "3", "写出当前 schema")
 	eq(t, e.str("rebind_pending"), "<nil>", "计划已清除")
 	eq(t, stateAt(e, "rebinds", 0, "result"), "committed", "审计记录 committed")
 	eq(t, stateAt(e, "rebinds", 0, "anchor_new_terminal"), "term_new_anchor", "审计记录锚点新值")
@@ -517,16 +517,16 @@ func TestRoleCandidateHintWithoutAnchorChange(t *testing.T) {
 }
 
 func TestStateSchemaCompatibility(t *testing.T) {
-	t.Run("写出 schema 2", func(t *testing.T) {
+	t.Run("写出当前 schema", func(t *testing.T) {
 		e, _ := rebindSetup(t, true, false)
-		eq(t, e.str("schema_version"), "2", "新写出的状态为 schema 2")
+		eq(t, e.str("schema_version"), "3", "新写出的状态为当前 schema")
 	})
-	t.Run("schema 1 无 rebind 字段仍可读取，保存后升级为 2", func(t *testing.T) {
+	t.Run("schema 1 无 rebind 字段仍可读取，保存后升级", func(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
-		e.stateSet(func(m map[string]any) { m["schema_version"] = 1; delete(m, "rebinds") })
+		e.stateSet(func(m map[string]any) { m["schema_version"] = 1; delete(m, "rebinds"); delete(m, "task_dir") })
 		e.mustRun("status", "--team", id)
 		e.mustRun("init", "--team", id)
-		eq(t, e.str("schema_version"), "2", "保存后升级")
+		eq(t, e.str("schema_version"), "3", "保存后升级")
 	})
 	t.Run("schema 1 携带 rebind 字段视为损坏", func(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
@@ -535,7 +535,7 @@ func TestStateSchemaCompatibility(t *testing.T) {
 	})
 	t.Run("未知 schema 拒绝", func(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
-		e.stateSet(func(m map[string]any) { m["schema_version"] = 3 })
+		e.stateSet(func(m map[string]any) { m["schema_version"] = 4 })
 		has(t, e.mustFail("status", "--team", id), "校验失败", "拒绝未知 schema")
 	})
 }

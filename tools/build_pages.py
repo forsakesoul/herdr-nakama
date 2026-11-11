@@ -30,13 +30,17 @@ command = "forsakesoul.nakama.init\""""
 REBIND = """nakama rebind --team <id> --preflight
 nakama rebind --team <id> --confirm-anchor <terminal>"""
 
+CHANGE = """nakama add   --team <id> --engine <engine>
+nakama swap  --team <id> --role worker
+nakama clean --team <id> --task <task_id>"""
+
 T = {
 "en": dict(
   docs="Docs", readme=f"{REPO}#readme", crumb="Herdr plugin · Owner / Worker / Advisor",
   h1a="One pane.", h1b="A whole crew.", h1c="",
   lead="Nakama builds an Owner / Worker / Advisor team from the pane you're in, initializes every role with the same protocol, and brings the same team back after a restart.",
   cta_install="Install", cta_demo="Watch the demo", nav_restart="After a restart",
-  video_note="85-second walkthrough · illustration, not a screen recording",
+  video_note="97-second walkthrough · illustration, not a screen recording",
   steps_h="Three steps to your first crew",
   s1="Install the plugin and create your private config (never committed).",
   s2="Bind two keys in <code>~/.config/herdr/config.toml</code>, then <code>herdr server reload-config</code>.",
@@ -47,6 +51,8 @@ T = {
   advisor_t="Advisor · navigator", advisor_d="Optional. Checks the plan and reviews the diff independently.", optional="optional",
   restart_h="After a restart, the same crew",
   restart_p="Herdr or the computer restarted and every terminal ID changed? Preflight first — read-only, zero writes — then confirm to bind the team again. Nothing is renamed or resent behind your back.",
+  change_h="Change the crew mid-voyage",
+  change_p="Add or drop the Advisor, or replace a stuck Worker, from the same <kbd>prefix</kbd>+<kbd>u</kbd> menu. Handoffs and reviews are written as files in a per-task directory, so a newcomer reads the latest handoff instead of asking around — and nothing is deleted until you say so.",
   why_h="Why “Nakama”",
   why_p="<em>Nakama</em> (仲間) is what Luffy calls his crew in <em>One Piece</em>: companions who each own part of the voyage. And like a Vivre Card pointing home, <code>nakama rebind</code> finds every member again after a storm.",
   lang_h="Your language", lang_p="CLI output and agent prompts in English, 中文 and 日本語 — set <code>NAKAMA_LANG</code>.",
@@ -57,7 +63,7 @@ T = {
   h1a="一个 pane，", h1b="一整船伙伴", h1c="。",
   lead="Nakama 以你所在的 pane 为锚点，组建 Owner / Worker / Advisor 编组，用同一套协议初始化每个角色；电脑或 Herdr 重启后，还能把原来那支船团接回来。",
   cta_install="安装", cta_demo="先看演示", nav_restart="重启接回",
-  video_note="85 秒使用演示 · 画面为示意动画，不是真实录屏",
+  video_note="97 秒使用演示 · 画面为示意动画，不是真实录屏",
   steps_h="三步组建你的第一支船团",
   s1="安装插件，生成私有配置（不入库）。",
   s2="在 <code>~/.config/herdr/config.toml</code> 绑定两个快捷键，然后 <code>herdr server reload-config</code>。",
@@ -68,6 +74,8 @@ T = {
   advisor_t="Advisor · 航海士", advisor_d="可选。独立核验方案、审查 diff。", optional="可选",
   restart_h="重启之后，还是那支船团",
   restart_p="电脑或 Herdr 重启、终端编号全变了？先预检（只读、零写入），确认后重新绑定。不会背着你改名或重发任何消息。",
+  change_h="航行中途，也能换人",
+  change_p="在同一个 <kbd>prefix</kbd>+<kbd>u</kbd> 菜单里加入或移除 Advisor，或替换卡住的 Worker。交接包和审查结论按任务写成文件，新来的伙伴直接读最新交接，不用别人转述；这些文件在你明确说可以删之前不会被清理。",
   why_h="为什么叫 Nakama",
   why_p="<em>Nakama</em>（仲間）是《海贼王》里路飞对船员的称呼：各自负责一段航程的伙伴。就像指向主人的生命卡，<code>nakama rebind</code> 会在风暴过后把每位伙伴找回来。",
   lang_h="你的语言", lang_p="CLI 输出与 agent 提示词支持 English、中文、日本語，用 <code>NAKAMA_LANG</code> 选择。",
@@ -78,7 +86,7 @@ T = {
   h1a="1つの pane から、", h1b="仲間のチームを", h1c="。",
   lead="Nakama はいまの pane を起点に Owner / Worker / Advisor のチームを組み、同じプロトコルで各ロールを初期化します。再起動後も、元の一味をそのまま呼び戻せます。",
   cta_install="インストール", cta_demo="デモを見る", nav_restart="再起動のあと",
-  video_note="85 秒の使い方紹介（英語音声）· 画面はイメージ図で、実際の録画ではありません",
+  video_note="97 秒の使い方紹介（英語音声）· 画面はイメージ図で、実際の録画ではありません",
   steps_h="3 ステップで最初の一味を",
   s1="プラグインをインストールし、非公開の設定を作成します（コミットしません）。",
   s2="<code>~/.config/herdr/config.toml</code> にキーを 2 つ割り当て、<code>herdr server reload-config</code> を実行します。",
@@ -89,6 +97,8 @@ T = {
   advisor_t="Advisor · 航海士", advisor_d="任意。方針を検証し、diff を独立にレビューします。", optional="任意",
   restart_h="再起動しても、同じ一味",
   restart_p="Herdr やコンピューターが再起動して terminal ID がすべて変わっても大丈夫。まずプリフライト（読み取り専用・書き込みゼロ）、確認してから再バインドします。勝手に改名や再送はしません。",
+  change_h="航海の途中でも、仲間を入れ替えられる",
+  change_p="同じ <kbd>prefix</kbd>+<kbd>u</kbd> のメニューから Advisor を追加・削除したり、止まった Worker を交代させたりできます。引き継ぎやレビューの結論はタスクごとのディレクトリにファイルとして残るので、新しい仲間は最新の引き継ぎを直接読めます。削除してよいと言うまで、これらのファイルは消えません。",
   why_h="なぜ「Nakama」なのか",
   why_p="<em>Nakama</em>（仲間）は『ONE PIECE』でルフィが船員を呼ぶ言葉です。ビブルカードのように、<code>nakama rebind</code> は嵐のあとで仲間を一人ひとり見つけ出します。",
   lang_h="あなたの言語で", lang_p="CLI 出力とエージェントのプロンプトは English・中文・日本語に対応。<code>NAKAMA_LANG</code> で選べます。",
@@ -252,6 +262,10 @@ def section_for(lang, t, media):
   <section class="two restart" id="restart-{lang}">
     <div><h2>{t['restart_h']}</h2><p>{t['restart_p']}</p></div>
     <div>{term('bash', REBIND, t)}</div>
+  </section>
+  <section class="two restart" id="change-{lang}">
+    <div><h2>{t['change_h']}</h2><p>{t['change_p']}</p></div>
+    <div>{term('bash', CHANGE, t)}</div>
   </section>
   <section class="two">
     <div class="card why"><h2>{t['why_h']}</h2><p>{t['why_p']}</p></div>

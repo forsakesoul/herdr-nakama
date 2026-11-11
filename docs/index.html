@@ -126,8 +126,8 @@ h2::before{content:"";display:inline-block;width:20px;height:20px;margin-right:1
     </div>
     <figure class="demo-sheet" id="demo-en">
     <div class="demo-label"><span>NAKAMA / FIELD LOG</span><span>01</span></div>
-    <video class="video" aria-label="Watch the demo" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=52a1d204"></video>
-    <figcaption class="note">85-second walkthrough · illustration, not a screen recording</figcaption>
+    <video class="video" aria-label="Watch the demo" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=25a1c667"></video>
+    <figcaption class="note">97-second walkthrough · illustration, not a screen recording</figcaption>
     </figure>
   </div>
   <nav class="chapter-nav" aria-label="Docs">
@@ -167,6 +167,12 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">Copy</button></div><pre>nakama rebind --team &lt;id&gt; --preflight
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
   </section>
+  <section class="two restart" id="change-en">
+    <div><h2>Change the crew mid-voyage</h2><p>Add or drop the Advisor, or replace a stuck Worker, from the same <kbd>prefix</kbd>+<kbd>u</kbd> menu. Handoffs and reviews are written as files in a per-task directory, so a newcomer reads the latest handoff instead of asking around — and nothing is deleted until you say so.</p></div>
+    <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">Copy</button></div><pre>nakama add   --team &lt;id&gt; --engine &lt;engine&gt;
+nakama swap  --team &lt;id&gt; --role worker
+nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>
+  </section>
   <section class="two">
     <div class="card why"><h2>Why “Nakama”</h2><p><em>Nakama</em> (仲間) is what Luffy calls his crew in <em>One Piece</em>: companions who each own part of the voyage. And like a Vivre Card pointing home, <code>nakama rebind</code> finds every member again after a storm.</p></div>
     <div><h2>Your language</h2><p>CLI output and agent prompts in English, 中文 and 日本語 — set <code>NAKAMA_LANG</code>.</p></div>
@@ -183,8 +189,8 @@ nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></d
     </div>
     <figure class="demo-sheet" id="demo-zh">
     <div class="demo-label"><span>NAKAMA / FIELD LOG</span><span>01</span></div>
-    <video class="video" aria-label="先看演示" controls preload="metadata" playsinline poster="media/nakama-usage-zh.png?v=3dfe231d" src="media/nakama-usage-zh.mp4?v=90d12150"></video>
-    <figcaption class="note">85 秒使用演示 · 画面为示意动画，不是真实录屏</figcaption>
+    <video class="video" aria-label="先看演示" controls preload="metadata" playsinline poster="media/nakama-usage-zh.png?v=3dfe231d" src="media/nakama-usage-zh.mp4?v=23defd14"></video>
+    <figcaption class="note">97 秒使用演示 · 画面为示意动画，不是真实录屏</figcaption>
     </figure>
   </div>
   <nav class="chapter-nav" aria-label="文档">
@@ -224,6 +230,12 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">复制</button></div><pre>nakama rebind --team &lt;id&gt; --preflight
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
   </section>
+  <section class="two restart" id="change-zh">
+    <div><h2>航行中途，也能换人</h2><p>在同一个 <kbd>prefix</kbd>+<kbd>u</kbd> 菜单里加入或移除 Advisor，或替换卡住的 Worker。交接包和审查结论按任务写成文件，新来的伙伴直接读最新交接，不用别人转述；这些文件在你明确说可以删之前不会被清理。</p></div>
+    <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">复制</button></div><pre>nakama add   --team &lt;id&gt; --engine &lt;engine&gt;
+nakama swap  --team &lt;id&gt; --role worker
+nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>
+  </section>
   <section class="two">
     <div class="card why"><h2>为什么叫 Nakama</h2><p><em>Nakama</em>（仲間）是《海贼王》里路飞对船员的称呼：各自负责一段航程的伙伴。就像指向主人的生命卡，<code>nakama rebind</code> 会在风暴过后把每位伙伴找回来。</p></div>
     <div><h2>你的语言</h2><p>CLI 输出与 agent 提示词支持 English、中文、日本語，用 <code>NAKAMA_LANG</code> 选择。</p></div>
@@ -240,8 +252,8 @@ nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></d
     </div>
     <figure class="demo-sheet" id="demo-ja">
     <div class="demo-label"><span>NAKAMA / FIELD LOG</span><span>01</span></div>
-    <video class="video" aria-label="デモを見る" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=52a1d204"></video>
-    <figcaption class="note">85 秒の使い方紹介（英語音声）· 画面はイメージ図で、実際の録画ではありません</figcaption>
+    <video class="video" aria-label="デモを見る" controls preload="metadata" playsinline poster="media/nakama-usage-en.png?v=8430e3d7" src="media/nakama-usage-en.mp4?v=25a1c667"></video>
+    <figcaption class="note">97 秒の使い方紹介（英語音声）· 画面はイメージ図で、実際の録画ではありません</figcaption>
     </figure>
   </div>
   <nav class="chapter-nav" aria-label="ドキュメント">
@@ -280,6 +292,12 @@ command = &quot;forsakesoul.nakama.init&quot;</pre></div></div></li>
     <div><h2>再起動しても、同じ一味</h2><p>Herdr やコンピューターが再起動して terminal ID がすべて変わっても大丈夫。まずプリフライト（読み取り専用・書き込みゼロ）、確認してから再バインドします。勝手に改名や再送はしません。</p></div>
     <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">コピー</button></div><pre>nakama rebind --team &lt;id&gt; --preflight
 nakama rebind --team &lt;id&gt; --confirm-anchor &lt;terminal&gt;</pre></div></div>
+  </section>
+  <section class="two restart" id="change-ja">
+    <div><h2>航海の途中でも、仲間を入れ替えられる</h2><p>同じ <kbd>prefix</kbd>+<kbd>u</kbd> のメニューから Advisor を追加・削除したり、止まった Worker を交代させたりできます。引き継ぎやレビューの結論はタスクごとのディレクトリにファイルとして残るので、新しい仲間は最新の引き継ぎを直接読めます。削除してよいと言うまで、これらのファイルは消えません。</p></div>
+    <div><div class="term"><div class="bar"><i></i><i></i><i></i><span>bash</span><button type="button" class="cp">コピー</button></div><pre>nakama add   --team &lt;id&gt; --engine &lt;engine&gt;
+nakama swap  --team &lt;id&gt; --role worker
+nakama clean --team &lt;id&gt; --task &lt;task_id&gt;</pre></div></div>
   </section>
   <section class="two">
     <div class="card why"><h2>なぜ「Nakama」なのか</h2><p><em>Nakama</em>（仲間）は『ONE PIECE』でルフィが船員を呼ぶ言葉です。ビブルカードのように、<code>nakama rebind</code> は嵐のあとで仲間を一人ひとり見つけ出します。</p></div>
