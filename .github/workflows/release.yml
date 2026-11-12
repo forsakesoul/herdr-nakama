@@ -1,0 +1,80 @@
+name: Release
+
+# 合并到 main 后，herdr-plugin.toml 的 version 还没有对应 release 就发布它并附上安装包；
+# 手动触发用于给已有 tag 补包。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build packages for, e.g. v0.0.3"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Package and publish (macOS)
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - name: Resolve version
+        id: v
+        run: |
+          ver="$(sed -n 's/^version = "\(.*\)"$/\1/p' herdr-plugin.toml | head -n 1)"
+          [ -n "$ver" ] || { echo "no version in herdr-plugin.toml" >&2; exit 1; }
+          tag="v$ver"
+          if [ -n "$INPUT_TAG" ] && [ "$INPUT_TAG" != "$tag" ]; then
+            echo "tag $INPUT_TAG does not match herdr-plugin.toml version $ver" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: github.event_name == 'workflow_dispatch' || steps.v.outputs.exists == 'false'
+        with:
+          go-version: stable
+      # 手动补包时检出的是旧 tag 的树，它可能没有打包脚本（v0.0.3 即如此）；
+      # 因此另检出默认分支，只取其中的打包脚本，在 tag 的树里运行。
+      - name: Checkout default branch packaging script
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: _main
+      - name: Test and package
+        if: github.event_name == 'workflow_dispatch' || steps.v.outputs.exists == 'false'
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            script="$GITHUB_WORKSPACE/_main/tools/package_release.sh"
+          else
+            script="tools/package_release.sh"
+          fi
+          "$script" dist
+      - name: Create release
+        if: steps.v.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: gh release create "$TAG" --target "$(git rev-parse HEAD)" --title "Nakama $TAG" --generate-notes
+      - name: Upload packages
+        if: github.event_name == 'workflow_dispatch' || steps.v.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: gh release upload "$TAG" dist/nakama-darwin-arm64.tar.gz dist/nakama-darwin-amd64.tar.gz dist/SHA256SUMS --clobber
