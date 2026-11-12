@@ -113,6 +113,10 @@ func fakeHerdr(args []string) {
 			pane = get(2)
 		}
 		cwd := env("FAKE_ANCHOR_CWD", "/tmp")
+		tab := "w0:t1"
+		if other := os.Getenv("FAKE_OTHER_TAB_PANE"); other != "" && pane == other {
+			tab = "w0:t9" // 模拟新 pane 落在锚点以外的 tab
+		}
 		if os.Getenv("FAKE_ANCHOR_CWD_EMPTY") != "" {
 			cwd = ""
 		}
@@ -123,7 +127,7 @@ func fakeHerdr(args []string) {
 			// 模拟重启后 shell 锚点的 terminal 变化（锚点无 agent 行，无法经 agent get 观测）。
 			term = at
 		}
-		fmt.Printf(`{"id":"cli:pane:%s","result":{"pane":{"pane_id":"%s","cwd":"%s","workspace_id":"w0","tab_id":"w0:t1","terminal_id":"%s","agent_status":"unknown"}}}`+"\n", get(1), pane, cwd, term)
+		fmt.Printf(`{"id":"cli:pane:%s","result":{"pane":{"pane_id":"%s","cwd":"%s","workspace_id":"w0","tab_id":"%s","terminal_id":"%s","agent_status":"unknown"}}}`+"\n", get(1), pane, cwd, tab, term)
 	case "pane split":
 		if dir := os.Getenv("NAKAMA_FAKE_SPLIT_BARRIER"); dir != "" {
 			if _, err := os.Stat(filepath.Join(dir, "ready")); err != nil {
@@ -172,6 +176,9 @@ func fakeHerdr(args []string) {
 		}
 		if n, _ := strconv.Atoi(os.Getenv("FAKE_BUSY_ATTEMPTS")); n > 0 && counter(log+".busy") <= n {
 			errOut("agent_pane_busy")
+		}
+		if sfx := os.Getenv("NAKAMA_FAKE_START_FAIL_SUFFIX"); sfx != "" && strings.HasSuffix(name, sfx) {
+			errOut("server_unavailable") // 仅让名称后缀匹配的成员启动失败（多成员失败注入）
 		}
 		appendRow(names, nameRow{name, pane, "term_" + pane, kind, ""})
 		if os.Getenv("NAKAMA_FAKE_START_NOT_READY") != "" {
@@ -256,6 +263,9 @@ func fakeHerdr(args []string) {
 			} else if late := os.Getenv("NAKAMA_FAKE_LATE_SESSION"); late != "" && sess == "null" {
 				sess = `{"value":"` + late + `"}`
 			}
+		}
+		if sfx := os.Getenv("FAKE_WORKING_SUFFIX"); sfx != "" && name != "" && strings.HasSuffix(name, sfx) {
+			status = "working"
 		}
 		fmt.Printf(`{"result":{"agent":{"name":"%s","pane_id":"%s","terminal_id":"%s","agent":"%s","agent_session":%s,"agent_status":"%s"}}}`+"\n", name, r.pane, r.term, r.kind, sess, status)
 	case "agent prompt":

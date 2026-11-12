@@ -163,12 +163,12 @@ func TestPendingGuardAndStoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tm.setPending("owner", "prompt", "SENT")
+	tm.setPending("O1", "prompt", "SENT")
 	eq(t, a.pendingGuard(tm), true, "SENT 放行并清除")
 	if tm.Pending != nil {
 		t.Fatal("SENT 应清除 pending")
 	}
-	tm.setPending("owner", "prompt", "NOT_SENT")
+	tm.setPending("O1", "prompt", "NOT_SENT")
 	eq(t, a.pendingGuard(tm), false, "非 SENT 阻止")
 	eq(t, tm.Pending.Delivery, "UNKNOWN", "标 UNKNOWN")
 	reloaded, err := a.st.load(tm.TeamID)
@@ -191,34 +191,34 @@ printf '{"result":{"agent":{"name":"","pane_id":"w0:p2","terminal_id":"term_p2",
 	t.Setenv("HERDR_BIN_PATH", bin)
 	t.Setenv("NAKAMA_START_POLL_TRIES", "6")
 	a := &app{stdout: os.Stdout, stderr: os.Stderr, st: store{dir: dir}}
-	tm := &Team{TeamID: "t1", Roles: Roles{Worker: &Role{Name: "x_execute", Engine: "cc", Pane: "w0:p2"}}}
-	if !a.captureIdentity(tm, "worker") {
+	tm := &Team{TeamID: "t1", Roles: map[string]*Role{"W1": {Name: "x_execute", Engine: "cc", Pane: "w0:p2"}}}
+	if !a.captureIdentity(tm, "W1") {
 		t.Fatal("captureIdentity 应成功")
 	}
-	eq(t, tm.Roles.Worker.LaunchIdentity.Session, "sess-late", "启动观测等到迟到的 session")
+	eq(t, tm.role("W1").LaunchIdentity.Session, "sess-late", "启动观测等到迟到的 session")
 }
 
 // 恢复已有重绑计划时，确认参数只能回显计划里已确认的值；任何不同都拒绝，不把新值套到旧计划上。
 func TestCheckPlanConfirm(t *testing.T) {
 	p := &RebindPlan{
-		Steps:             []RebindStep{{Role: "owner", New: Ident{Session: "s-owner"}}, {Role: "worker", New: Ident{Session: "s-worker"}}},
+		Steps:             []RebindStep{{Role: "O1", New: Ident{Session: "s-owner"}}, {Role: "W1", New: Ident{Session: "s-worker"}}},
 		AnchorNew:         "term_new",
 		AnchorIdentityNew: &Ident{Session: "s-anchor"},
 	}
 	ok := map[string]rebindOpts{
 		"无确认参数":  {},
-		"回显单个角色": {confirm: map[string]string{"owner": "s-owner"}},
-		"回显全部":   {confirm: map[string]string{"owner": "s-owner", "worker": "s-worker", "anchor": "s-anchor"}, confirmAnchor: "term_new"},
+		"回显单个角色": {confirm: map[string]string{"O1": "s-owner"}},
+		"回显全部":   {confirm: map[string]string{"O1": "s-owner", "W1": "s-worker", "anchor": "s-anchor"}, confirmAnchor: "term_new"},
 	}
 	for name, o := range ok {
 		eq(t, checkPlanConfirm(p, o), "", name+"：回显计划值应放行")
 	}
 	bad := map[string]rebindOpts{
-		"角色 session 不同":  {confirm: map[string]string{"owner": "other"}},
-		"计划里没有的角色":       {confirm: map[string]string{"advisor": "s-owner"}},
+		"角色 session 不同":  {confirm: map[string]string{"O1": "other"}},
+		"计划里没有的角色":       {confirm: map[string]string{"A1": "s-owner"}},
 		"锚点 session 不同":  {confirm: map[string]string{"anchor": "other"}},
 		"锚点 terminal 不同": {confirmAnchor: "term_other"},
-		"跨角色借用 session":  {confirm: map[string]string{"worker": "s-owner"}},
+		"跨角色借用 session":  {confirm: map[string]string{"W1": "s-owner"}},
 	}
 	for name, o := range bad {
 		if checkPlanConfirm(p, o) == "" {

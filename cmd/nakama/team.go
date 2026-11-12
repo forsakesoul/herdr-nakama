@@ -60,11 +60,26 @@ func genPrefix(short string) (string, error) {
 	return short + "_" + hex.EncodeToString(hash[:6]), nil
 }
 
+// parseCount 解析 1..max（或 lo..max）的人数参数；空串返回 def。
+func parseCount(raw string, def, lo, hi int, flag string) (int, error) {
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < lo || n > hi {
+		return 0, fmt.Errorf(L("%s 须为 %d-%d 的整数：%s"), flag, lo, hi, raw)
+	}
+	return n, nil
+}
+
 // 在任何 split 之前校验全部角色名（Herdr NAME 规则 + ≤32）；失败零副作用。
-func (a *app) validateNames(prefix string, hasAdvisor bool) error {
-	names := []string{prefix + "_design", prefix + "_execute"}
-	if hasAdvisor {
-		names = append(names, prefix+"_advisor")
+func (a *app) validateNames(prefix string, nWorkers, nAdvisors int) error {
+	names := []string{roleName(prefix, "owner", 1)}
+	for i := 1; i <= nWorkers; i++ {
+		names = append(names, roleName(prefix, "worker", i))
+	}
+	for i := 1; i <= nAdvisors; i++ {
+		names = append(names, roleName(prefix, "advisor", i))
 	}
 	for _, n := range names {
 		if !nameValid(n) {
@@ -100,6 +115,14 @@ func (a *app) runSplit(t *Team, rn, base, dir string) (string, error) {
 	if a.interrupted() {
 		return "", errExit
 	}
+	// 新 pane 只能开在锚点当前 tab 内：split 前核对 base（零副作用拒绝），split 后再核对新 pane（UNKNOWN 停止）。
+	if b := a.herdr("pane", "get", base); !b.ok() {
+		a.errf(L("无法读取 base pane %s 的 workspace/tab；拒绝 split。"), base)
+		return "", errExit
+	} else if msg := tabMismatch(t, parsePane(b.stdout)); msg != "" {
+		a.errf("%s", msg)
+		return "", errExit
+	}
 	t.setPending(rn, "split", "NOT_SENT")
 	if err := a.save(t); err != nil {
 		return "", err
@@ -113,15 +136,23 @@ func (a *app) runSplit(t *Team, rn, base, dir string) (string, error) {
 	if pane == "" {
 		return "", unknown()
 	}
+	// pane ID 已发生但尚未证实同 tab：保持 UNKNOWN 落盘，中断后的重跑由 pendingGuard 停止，不会把它当作已确认的 SENT。
 	t.role(rn).Pane = NullStr(pane)
-	t.Pending.Delivery = "SENT"
+	t.Pending.Delivery = "UNKNOWN"
 	if err := a.save(t); err != nil {
 		return "", err
 	}
-	// split 后记录该 pane 的 terminal_id，作为首次冻结的连续性证据。
+	if a.hookAfterSplitPersist != nil && a.hookAfterSplitPersist(pane) {
+		return "", errExit
+	}
+	// split 后记录该 pane 的 terminal_id，作为首次冻结的连续性证据，同时核对 tab。
 	g := a.herdr("pane", "get", pane)
 	if !g.ok() {
 		a.errf(L("split 后无法读取 pane %s 的 terminal_id"), pane)
+		return "", unknown()
+	}
+	if msg := tabMismatch(t, parsePane(g.stdout)); msg != "" {
+		a.errf("%s", msg)
 		return "", unknown()
 	}
 	term := parsePane(g.stdout).TerminalID
@@ -132,6 +163,18 @@ func (a *app) runSplit(t *Team, rn, base, dir string) (string, error) {
 	t.role(rn).PaneTerminal = term
 	t.Pending = nil
 	return pane, a.save(t)
+}
+
+// tabMismatch：pane 必须与锚点记录处于同一 workspace/tab；记录缺失即拒绝（不因无记录而放行）。空串表示通过。
+func tabMismatch(t *Team, p paneObj) string {
+	if t.Anchor.WorkspaceID == "" || t.Anchor.TabID == "" {
+		return L("编组缺少锚点 workspace/tab 记录，无法证明新 pane 位于锚点 tab 内；拒绝。")
+	}
+	if p.WorkspaceID != t.Anchor.WorkspaceID || p.TabID != t.Anchor.TabID {
+		return fmt.Sprintf(L("pane %s 不在锚点所在的 workspace/tab 内（记录 %s/%s，当前 %s/%s）；拒绝。"),
+			p.PaneID, t.Anchor.WorkspaceID, t.Anchor.TabID, p.WorkspaceID, p.TabID)
+	}
+	return ""
 }
 
 // 仅「启动前 agent_pane_busy」可有界重试（最多 6 次）。
@@ -224,16 +267,13 @@ func (a *app) pendingGuard(t *Team) bool {
 
 func (a *app) printNext(t *Team) {
 	a.outf("NEXT:\n")
-	for _, rn := range roleOrder {
-		r := t.role(rn)
-		if r == nil {
-			continue
-		}
+	for _, key := range t.members() {
+		r := t.role(key)
 		pane := string(r.Pane)
 		if pane == "" {
 			pane = "?"
 		}
-		a.outf("- %s pane %s：%s\n", rn, pane, a.hint(r.Engine))
+		a.outf("- %s %s pane %s：%s\n", kindOf(key), key, pane, a.hint(r.Engine))
 	}
 	a.outf("%s", L("- 运行 nakama init 完成绑定与初始化\n"))
 }
@@ -247,13 +287,14 @@ func (a *app) hint(raw string) string {
 
 // ---- up ----
 func (a *app) cmdUp(args []string) error {
-	var cliOwner, cliWorker, cliAdvisor, cliPane, cliCwd string
+	var cliOwner, cliWorker, cliAdvisor, cliWorkers, cliAdvisors, cliPane, cliCwd string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		dst := map[string]*string{"--owner": &cliOwner, "--worker": &cliWorker, "--advisor": &cliAdvisor, "--pane": &cliPane, "--cwd": &cliCwd}[arg]
+		dst := map[string]*string{"--owner": &cliOwner, "--worker": &cliWorker, "--advisor": &cliAdvisor,
+			"--workers": &cliWorkers, "--advisors": &cliAdvisors, "--pane": &cliPane, "--cwd": &cliCwd}[arg]
 		switch {
 		case arg == "-h" || arg == "--help":
-			a.outf("%s", L("用法：nakama up [--owner E] [--worker E] [--advisor E|none] [--pane P] [--cwd C]\n"))
+			a.outf("%s", L("用法：nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]\n"))
 			return nil
 		case dst == nil:
 			return a.fail(L("未知参数：%s"), arg)
@@ -312,8 +353,20 @@ func (a *app) cmdUp(args []string) error {
 	if _, ok := parseEngine(workerEng); !ok {
 		return a.fail(L("无法识别 Worker 引擎：%s"), workerEng)
 	}
+	nWorkers, err := parseCount(cliWorkers, 1, 1, maxPerRole, "--workers")
+	if err != nil {
+		return a.fail("%v", err)
+	}
+	// 数量解析先于 advisor 引擎：--advisors 0 与 --advisor none 都不解析 advisor 引擎。
+	nAdvisors, err := parseCount(cliAdvisors, -1, 0, maxPerRole, "--advisors")
+	if err != nil {
+		return a.fail("%v", err)
+	}
+	if cliAdvisor == "none" && nAdvisors > 0 {
+		return a.fail(L("--advisor none 与 --advisors %d 不能同时使用。"), nAdvisors)
+	}
 	advisorEng := ""
-	if cliAdvisor != "none" {
+	if cliAdvisor != "none" && nAdvisors != 0 {
 		if advisorEng, err = cfg.pickEngine("advisor", cliAdvisor); err != nil {
 			return a.fail("%v", err)
 		}
@@ -324,13 +377,23 @@ func (a *app) cmdUp(args []string) error {
 			return a.fail(L("无法识别 Advisor 引擎：%s"), advisorEng)
 		}
 	}
+	if nAdvisors < 0 {
+		// 未指定时：advisor 引擎非 none 缺省 1 个，否则 0 个。
+		nAdvisors = 0
+		if advisorEng != "" {
+			nAdvisors = 1
+		}
+	}
+	if nAdvisors > 0 && advisorEng == "" {
+		return a.fail(L("--advisors %d 需要 Advisor 引擎：请用 --advisor 指定，或在 config.json 配置 default_profile.advisor。"), nAdvisors)
+	}
 
 	// 名称先行：唯一生成点 + 任何 split 之前的 NAME 校验（失败零副作用）。
 	prefix, err := genPrefix(proj.short)
 	if err != nil {
 		return a.fail(L("无法生成 run id。"))
 	}
-	if err := a.validateNames(prefix, advisorEng != ""); err != nil {
+	if err := a.validateNames(prefix, nWorkers, nAdvisors); err != nil {
 		return err
 	}
 	for _, c := range []struct{ label, eng string }{{"Owner", ownerEng}, {"Worker", workerEng}, {"Advisor", advisorEng}} {
@@ -351,10 +414,12 @@ func (a *app) cmdUp(args []string) error {
 		Anchor: Anchor{PaneID: a.anchor.PaneID, WorkspaceID: a.anchor.WorkspaceID, TabID: a.anchor.TabID, CWD: a.anchor.CWD},
 		CWD:    a.anchor.CWD, TeamRev: 1, ProtocolVersion: protoSha, Phase: "starting",
 	}
-	newRole := func(suffix, eng string) *Role { return &Role{Name: prefix + suffix, Engine: eng, Instance: 1} }
-	t.Roles.Owner, t.Roles.Worker = newRole("_design", ownerEng), newRole("_execute", workerEng)
-	if advisorEng != "" {
-		t.Roles.Advisor = newRole("_advisor", advisorEng)
+	t.addRole(ownerKey, &Role{Name: roleName(prefix, "owner", 1), Engine: ownerEng, Instance: 1})
+	for i := 1; i <= nWorkers; i++ {
+		t.addRole(memberKey("worker", i), &Role{Name: roleName(prefix, "worker", i), Engine: workerEng, Instance: i})
+	}
+	for i := 1; i <= nAdvisors; i++ {
+		t.addRole(memberKey("advisor", i), &Role{Name: roleName(prefix, "advisor", i), Engine: advisorEng, Instance: i})
 	}
 	if proj.contextFile != "" {
 		ctxSha := ""
@@ -379,14 +444,16 @@ func (a *app) cmdUp(args []string) error {
 	}
 	a.outf("== Team: owner=%s worker=%s advisor=%s ==\n", ownerEng, workerEng, adv)
 
-	if _, err := a.runSplit(t, "owner", a.anchor.PaneID, "right"); err != nil {
+	if _, err := a.runSplit(t, ownerKey, a.anchor.PaneID, "right"); err != nil {
 		return a.fail(L("Owner pane 创建失败。核对后重跑 up。"))
 	}
-	if _, err := a.runSplit(t, "worker", a.anchor.PaneID, "down"); err != nil {
-		return a.fail(L("Worker pane 创建失败。核对后重跑 up。"))
+	for _, key := range t.membersOf("worker") {
+		if err := a.splitMember(t, key); err != nil {
+			return a.fail(L("Worker pane 创建失败。核对后重跑 up。"))
+		}
 	}
-	if advisorEng != "" {
-		if _, err := a.runSplit(t, "advisor", string(t.Roles.Owner.Pane), "down"); err != nil {
+	for _, key := range t.membersOf("advisor") {
+		if err := a.splitMember(t, key); err != nil {
 			return a.fail(L("Advisor pane 创建失败。核对后重跑 up。"))
 		}
 	}
@@ -395,16 +462,18 @@ func (a *app) cmdUp(args []string) error {
 		return err
 	}
 
-	if err := a.runLaunch(t, "owner"); err != nil {
+	if err := a.runLaunch(t, ownerKey); err != nil {
 		return a.fail(L("Owner 启动失败。核对 get/read 后重跑 up 继续。"))
 	}
-	if advisorEng != "" {
-		if err := a.runLaunch(t, "advisor"); err != nil {
+	for _, key := range t.membersOf("advisor") {
+		if err := a.runLaunch(t, key); err != nil {
 			return a.fail(L("Advisor 启动失败。核对 get/read 后重跑 up 继续。"))
 		}
 	}
-	if err := a.runLaunch(t, "worker"); err != nil {
-		return a.fail(L("Worker 启动失败。核对 get/read 后重跑 up 继续。"))
+	for _, key := range t.membersOf("worker") {
+		if err := a.runLaunch(t, key); err != nil {
+			return a.fail(L("Worker 启动失败。核对 get/read 后重跑 up 继续。"))
+		}
 	}
 	t.Phase = "launched"
 	if err := a.save(t); err != nil {
@@ -412,10 +481,8 @@ func (a *app) cmdUp(args []string) error {
 	}
 
 	a.outf("\nNEXT:\n")
-	for _, c := range []struct{ rn, eng string }{{"owner", ownerEng}, {"worker", workerEng}, {"advisor", advisorEng}} {
-		if c.eng != "" {
-			a.outf("- %s pane %s：%s\n", c.rn, t.role(c.rn).Pane, a.hint(c.eng))
-		}
+	for _, key := range t.members() {
+		a.outf("- %s %s pane %s：%s\n", kindOf(key), key, t.role(key).Pane, a.hint(t.role(key).Engine))
 	}
 	a.outf("%s", L("- cc/ccenv/pi 需等 Herdr 识别（herdr agent list）后运行 nakama init\n"))
 	return nil
@@ -457,9 +524,9 @@ func (a *app) upExisting(id string) error {
 // 已建且已启动的角色身份核验；任一失败返回 false。
 func (a *app) verifyBuiltRoles(t *Team) bool {
 	ok := true
-	for _, rn := range roleOrder {
+	for _, rn := range t.members() {
 		r := t.role(rn)
-		if r == nil || r.Pane == "" || !r.Launched {
+		if r.Pane == "" || !r.Launched {
 			continue
 		}
 		eng, _ := parseEngine(r.Engine)
@@ -483,11 +550,8 @@ func (a *app) resumeHalf(t *Team) error {
 	if !a.verifyBuiltRoles(t) {
 		return a.fail(L("半组状态不安全（已建角色身份核验失败）。人工核验步骤：对每个角色执行 herdr agent get/read，确认 pane/实例后重建或重新 up；不自动继续。"))
 	}
-	for _, rn := range roleOrder {
-		if t.role(rn) == nil {
-			continue
-		}
-		if err := a.ensureRole(t, rn); err != nil {
+	for _, key := range t.members() {
+		if err := a.ensureRole(t, key); err != nil {
 			return err
 		}
 	}
@@ -501,25 +565,42 @@ func (a *app) resumeHalf(t *Team) error {
 }
 
 // 补齐单个角色的缺失步骤（split / 启动）；半组恢复与编组变更（add / swap）共用。
-func (a *app) ensureRole(t *Team, rn string) error {
-	r := t.role(rn)
+// splitMember 为 Worker / Advisor 成员创建 pane。布局：Worker 从锚点（或同类中键序在其之前、最后一个已有 pane 的成员）向下；
+// Advisor 从 Owner（或同类前一个已有 pane 的成员）向下。Owner 固定从锚点右侧创建。
+func (a *app) splitMember(t *Team, key string) error {
+	kind := kindOf(key)
+	base := a.anchor.PaneID
+	if kind == "advisor" {
+		if base = string(t.owner().Pane); base == "" {
+			return a.fail(L("半组恢复失败：advisor 需要先有 owner pane。人工核验后重建。"))
+		}
+	}
+	for _, k := range t.membersOf(kind) {
+		if keyInstance(k) >= keyInstance(key) {
+			break
+		}
+		if p := string(t.role(k).Pane); p != "" {
+			base = p
+		}
+	}
+	if !a.requireEngine(t.role(key).Engine) {
+		return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), key)
+	}
+	dir := "down"
+	if kind == "owner" {
+		dir = "right"
+	}
+	_, err := a.runSplit(t, key, base, dir)
+	return err
+}
+
+// 补齐单个成员的缺失步骤（split / 启动）；半组恢复与编组变更（add / swap）共用。key 为成员键。
+func (a *app) ensureRole(t *Team, key string) error {
+	r := t.role(key)
 	created := false
 	if r.Pane == "" {
-		base, dir := a.anchor.PaneID, "right"
-		if rn == "worker" {
-			dir = "down"
-		}
-		if rn == "advisor" {
-			if base = string(t.Roles.Owner.Pane); base == "" {
-				return a.fail(L("半组恢复失败：advisor 需要先有 owner pane。人工核验后重建。"))
-			}
-			dir = "down"
-		}
-		if !a.requireEngine(r.Engine) {
-			return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), rn)
-		}
-		if _, err := a.runSplit(t, rn, base, dir); err != nil {
-			return a.fail(L("半组恢复：%s split 失败。核对后重跑 up。"), rn)
+		if err := a.splitMember(t, key); err != nil {
+			return a.fail(L("半组恢复：%s split 失败。核对后重跑 up。"), key)
 		}
 		created = true
 	}
@@ -529,14 +610,14 @@ func (a *app) ensureRole(t *Team, rn string) error {
 				if code == "" {
 					code = "n/a"
 				}
-				return a.fail(L("半组恢复：%s pane %s 占用状态=%s（原始分类 %s）；拒绝启动，请人工核对。"), rn, r.Pane, state, code)
+				return a.fail(L("半组恢复：%s pane %s 占用状态=%s（原始分类 %s）；拒绝启动，请人工核对。"), key, r.Pane, state, code)
 			}
 		}
 		if !a.requireEngine(r.Engine) {
-			return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), rn)
+			return a.fail(L("半组恢复失败：%s 引擎前置不满足。"), key)
 		}
-		if err := a.runLaunch(t, rn); err != nil {
-			return a.fail(L("半组恢复：%s 启动失败。核对 get/read 后重跑 up。"), rn)
+		if err := a.runLaunch(t, key); err != nil {
+			return a.fail(L("半组恢复：%s 启动失败。核对 get/read 后重跑 up。"), key)
 		}
 	}
 	return nil
@@ -617,11 +698,8 @@ func (a *app) cmdInit(args []string) error {
 	a.herdr("agent", "list") // 触发 Herdr 刷新识别，结果不用
 
 	overall := true
-	for _, rn := range []string{"worker", "advisor", "owner"} {
+	for _, rn := range t.initOrder() {
 		r := t.role(rn)
-		if r == nil {
-			continue
-		}
 		if r.Inited {
 			// 已 inited 角色跳过投递前先做只读身份复核；不一致标 stale，不重发。
 			// stale 只在此置位、从不自动清除：身份碰巧再次匹配也不能证明中间没被替换过。
@@ -668,8 +746,8 @@ func (a *app) cmdInit(args []string) error {
 	}
 
 	ready := overall
-	for _, rn := range roleOrder {
-		if r := t.role(rn); r != nil && (!r.Inited || r.Stale) {
+	for _, rn := range t.members() {
+		if r := t.role(rn); !r.Inited || r.Stale {
 			ready = false
 		}
 	}
@@ -714,8 +792,8 @@ func (a *app) resolveTeam(cliTeam, cliPane, cliCwd string) (string, error) {
 // 未冻结的手动角色沿用 verifyFirstFreeze，其余拒绝。返回非空表示拒绝。
 func (a *app) verifyCallerRole(t *Team, pane string) string {
 	rn := ""
-	for _, n := range roleOrder {
-		if r := t.role(n); r != nil && string(r.Pane) == pane {
+	for _, n := range t.members() {
+		if string(t.role(n).Pane) == pane {
 			rn = n
 			break
 		}
@@ -885,11 +963,8 @@ func (a *app) statusTeam(t *Team) {
 	a.outf("protocol_sha256=%s\n", t.ProtocolVersion)
 	// status 只读：生命周期 status 取自记录 pane 的观测；binding 说明记录身份是否仍有效（bound/candidate/unverified）。
 	candidate := a.rebindAnchorBinding(t) == "candidate"
-	for _, rn := range roleOrder {
+	for _, rn := range t.members() {
 		r := t.role(rn)
-		if r == nil {
-			continue
-		}
 		pane := string(r.Pane)
 		if pane == "" {
 			pane = "?"
@@ -904,7 +979,7 @@ func (a *app) statusTeam(t *Team) {
 		if r.TeamUpdate {
 			upd = " team_update=pending"
 		}
-		a.outf("  %-7s name=%s pane=%s engine=%s inited=%t stale=%t status=%s binding=%s%s\n", rn, r.Name, pane, r.Engine, r.Inited, r.Stale, st, label, upd)
+		a.outf("  %-7s %-3s name=%s pane=%s engine=%s inited=%t stale=%t status=%s binding=%s%s\n", kindOf(rn), rn, r.Name, pane, r.Engine, r.Inited, r.Stale, st, label, upd)
 	}
 	for _, x := range t.Retired {
 		a.outf("  retired %s%d name=%s pane=%s engine=%s op=%s\n", strings.ToUpper(x.Role[:1]), x.Instance, x.Name, x.Pane, x.Engine, x.Op)

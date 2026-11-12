@@ -54,7 +54,7 @@ command = "forsakesoul.nakama.init"
 description = "nakama: init（現在のアンカーのチームを初期化）"
 ```
 
-対象 pane で `prefix+u` を押すとエンジン選択画面（overlay）が開きます。Owner / Worker / Advisor を順に選び（Enter で既定値。`engine_map` の短縮名か完全な `<launcher>/<model>[:effort]` を入力でき、Advisor は `none` も可）、概要を確認すると、キーを押した時点でフォーカスされていた pane をアンカーとしてチームを作成します。`Ctrl-C` でキャンセル（確認前は何も作成されません）。その pane があるチームのアンカーまたはロール pane である場合は、そのチームの管理メニュー（Advisor の追加・削除、Worker / Advisor の交代、タスクディレクトリの削除。「途中でのロールの追加・削除・交代」参照）を表示します。在籍インスタンスのエンジンは固定のままで、モデルを変えるにはインスタンスを交代させます。新規作成のフローは新規作成専用です。確認中にその pane にチーム（作りかけを含む）が現れた場合も拒否し、復旧や引き継ぎはしません。作成中にシグナルを受けると、実行中の操作を永続化してから非ゼロで終了し、結果画面には留まりません。エージェントの起動を確認したら `prefix+i` で初期化します。結果は `herdr plugin action invoke status --plugin forsakesoul.nakama` または `herdr plugin log list --plugin forsakesoul.nakama` で確認できます。
+対象 pane で `prefix+u` を押すとエンジン選択画面（overlay）が開きます。Owner のエンジン、Worker のエンジン、Worker 数（1〜4）の順に選び、続けて Advisor のエンジンを選びます。Advisor が `none` でない場合のみ Advisor 数（1〜4）を入力します（Enter で既定値。`engine_map` の短縮名か完全な `<launcher>/<model>[:effort]` を入力でき、Advisor は `none` も可）、概要を確認すると、キーを押した時点でフォーカスされていた pane をアンカーとしてチームを作成します。`Ctrl-C` でキャンセル（確認前は何も作成されません）。その pane があるチームのアンカーまたはロール pane である場合は、そのチームの管理メニュー（Worker / Advisor の追加・削除・交代、タスクディレクトリの削除。「途中でのロールの追加・削除・交代」参照）を表示します。在籍インスタンスのエンジンは固定のままで、モデルを変えるにはインスタンスを交代させます。新規作成のフローは新規作成専用です。確認中にその pane にチーム（作りかけを含む）が現れた場合も拒否し、復旧や引き継ぎはしません。作成中にシグナルを受けると、実行中の操作を永続化してから非ゼロで終了し、結果画面には留まりません。エージェントの起動を確認したら `prefix+i` で初期化します。結果は `herdr plugin action invoke status --plugin forsakesoul.nakama` または `herdr plugin log list --plugin forsakesoul.nakama` で確認できます。
 
 > `up` アクションは従来の動作（`default_profile` に従ってチームを作成、または CLI で `--owner/--worker/--advisor` を指定）を維持し、作りかけのチームの再開にも使います。シェルからの `herdr plugin action invoke up/init/pick` は呼び出し元の pane を渡さず、UI で現在フォーカスされている pane をアンカーにするため、`pick` / `up` / `init` はキーバインドで（または対象 pane にフォーカスがある状態で）実行してください。
 
@@ -127,18 +127,18 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 失敗時の検証、モデル昇格と調整の承認は[共有プロトコルの Claude ルール](prompts/ja/protocol.md)に従います。在籍インスタンスのエンジンは固定したままとし、調整が必要なら安全な停止点で引き継いでそのロールのインスタンスを交代させるか（「途中でのロールの追加・削除・交代」参照）、プロトコルに従って新しい pane に編組を作成します。
 
-共有プロトコルの内容を変えると、その言語の `protocol_version` が変わります。旧編組の初期化時に hash が一致しなければ、新しい編組を作成し、状態を書き換えて回避しません。既存ロールのコンテキストは自動更新されません。
+共有プロトコルの内容を変えると、その言語の `protocol_version` が変わります。このバージョンは `protocol.md` を変更したため、それ以前に作成された編組は init / add / swap で拒否されます。作り直してください。旧編組の初期化時に hash が一致しなければ、新しい編組を作成し、状態を書き換えて回避しません。既存ロールのコンテキストは自動更新されません。
 
 ## 使い方
 
 ```sh
-nakama up [--owner E] [--worker E] [--advisor E|none] [--pane P] [--cwd C]
+nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <role>=<session>]... [--confirm-anchor <terminal>]
-nakama add --team <id> [--engine E]
-nakama drop --team <id>
-nakama swap --team <id> --role worker|advisor [--engine E]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <メンバーキー|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama add --team <id> [--role worker|advisor] [--engine E]
+nakama drop --team <id> [--role worker|advisor] [--instance N]
+nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 ```
 
@@ -151,9 +151,9 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 
 ## 途中でのロールの追加・削除・交代
 
-チームの初期化後に、独立 Advisor を追加・削除したり、止まってしまった Worker や Advisor を交代させたりできます。Owner は交代できず、Worker は常に 1 つだけです。
+チームの初期化後に、Worker / Advisor を追加・削除・交代させられます（止まってしまったものも含みます）。Owner は交代できません。チームは Owner 1 つ、Worker 1〜4 つ、Advisor 0〜4 つで構成されます（既定は Worker 1 + Advisor 1）。人数の上限は同時に在籍するメンバーに適用され、インスタンス番号には適用されません。同じロールに複数のメンバーがいる場合、`swap` と `drop` には `--instance N` が必要です。新しい pane は常にアンカーと同じ tab 内で split します。確認できない場合は操作を止め、tab やウィンドウは作りません。
 
-- **入口**：アンカーまたは任意のロール pane で `prefix+u` を押すと、既存チームでは管理メニューが開きます（`a` Advisor を追加、`x` 外す、`v` Advisor を交代、`w` Worker を交代、`c` タスクディレクトリを削除）。エンジンを選んで確認すると実行されます。CLI では `nakama add / drop / swap --team <id>` です。
+- **入口**：アンカーまたは任意のロール pane で `prefix+u` を押すと、既存チームでは管理メニューが開きます（`a` Advisor を追加、`n` Worker を追加、`x` Advisor を外す、`r` Worker を外す（最後の 1 つは不可）、`v` Advisor を交代、`w` Worker を交代、`c` タスクディレクトリを削除。同じロールに複数のメンバーがいる場合はメンバーキー（例：`W2`）を入力し、CLI の `--instance` は番号（例：`2`）を使います）。エンジンを選んで確認すると実行されます。CLI では `nakama add / drop / swap --team <id>` です。
 - **2 段階**：`add` / `swap` は pane を作成して新しいインスタンスを起動するだけです。モデルと権限を確認したら `prefix+i` を押します。`init` が新しいロールを初期化し、ほかの在籍ロールに `[TEAM_UPDATE]`（最新のマッピングとそのロールの新しい分担規則）を 1 回ずつ配信します。`drop` は新しいインスタンスがないため、すぐに配信します。
 - **アイドルのロールにだけ通知**：`[TEAM_UPDATE]` は識別の検証に通り、idle/done のロールにだけ送ります。作業中やダイアログで止まっているロールには未通知の印が残り（`status` に `team_update=pending` と表示）、アイドルになってからもう一度 `prefix+i` を押します。
 - **旧インスタンス**：交代または削除されたインスタンスは状態の `retired` に記録されます。その pane は閉じず、名前も変えず、プラグインからの入力も送りません。Worker を交代させる前に旧 Worker が書き込みを止めたことを確認し、その pane はご自身で処理してください。
@@ -194,7 +194,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 
 **手順。**
 1. まず読み取り専用のプリフライト（書き込みゼロ）を実行：`nakama rebind --team <id> --preflight`。ロールとアンカーごとに `terminal 旧 → 新`、session とタスク名の差分を出力します。
-2. 出力に従って確認引数を加えて実行：`nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal> [--confirm-session <role>=<session>]...`。
+2. 出力に従って確認引数を加えて実行：`nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal> [--confirm-session <メンバーキー|anchor>=<session>]...`。メンバーキーは O1、W1、W2、A1… の形です（例：`--confirm-session W2=<session>` は 2 番目の Worker の session を確認します）。
    - `--confirm-session` は記録された session が空のロール（例：最初の prompt 前に固定された codex）専用で、値は今回観測された非空の session と一致する必要があります。
    - `--confirm-anchor` は identity を持たないシェルアンカー専用で、値は今回観測された新しい terminal と一致する必要があります。
    - 記録された session が非空のロールは確認による上書きを受け付けず、観測値が記録と一致する必要があります。
@@ -221,8 +221,8 @@ CLI では Herdr サーバーの名前空間を証明できません。アンカ
 **Bridge との競合。** Herdr の rename には compare-and-swap の意味論がないため、読み取りと改名の間に Bridge が自動命名する可能性を数学的に排除できません。
 ずれを検出したら停止して計画を保持します。プラグインは Bridge を追いかけたり変更したりしません。成功しても名前が永久に変わらないとは限らず、その後の `init` / `prompt` は引き続き厳格なルールで検査します。
 
-**状態の互換性。** このバージョンは `schema_version: 3` を書き込みます：schema 2 で `rebind_pending` と `rebinds`（監査）、schema 3 で `task_dir`、`retired`、ロールごとの `team_update_pending` を追加しました。旧バージョンはより高い schema を読むと拒否するため、
-新しいフィールドを失った状態で上書きされることはありません。旧バージョンに戻す場合は、未完了の計画がないことを確認し、状態ファイルを自分で処理してください。schema 1 と 2 は引き続き読み込め、保存時に 3 へ更新されます。
+**状態の互換性。** このバージョンは `schema_version: 4` を書き込みます：ロールはメンバーキー（`O1`、`W1`、`W2`、`A1`…）で管理されます。schema 1〜3 の旧状態はメモリ上で変換され、初回保存時にのみ schema 4 として書き戻されます。schema 2 で `rebind_pending` と `rebinds`（監査）、schema 3 で `task_dir`、`retired`、ロールごとの `team_update_pending` を追加しました。旧バージョンはより高い schema を読むと拒否するため、
+新しいフィールドを失った状態で上書きされることはありません。旧バージョンに戻す場合は、未完了の計画がないことを確認し、状態ファイルを自分で処理してください。schema 1〜3 は引き続き読み込め、初回の実際の書き込み時に 4 へ更新されます。
 
 **自動では行われないこと。** `init` と `up` は再バインドを行いません。`init` は「terminal または名前だけが変わった候補」を検出すると `明示的な rebind --team <id> が必要な可能性` を案内するだけで、
 stale にせず状態も書き込みません。`status` は読み取り専用で、記録された pane に基づいて観測し、`binding=bound|candidate|unverified` を出力して、ライフサイクルの `status` とバインドの有効性を区別します。`bound` は現在のタスク名が記録されたロール名と一致することも要求し、他者の名前や空の場合は最大でも `unverified` です。`candidate` は候補（同じ pane と kind で terminal または名前が変化）にすぎず、`rebind` がプリフライトを通過する保証はないため、まず `--preflight` で確認してください。

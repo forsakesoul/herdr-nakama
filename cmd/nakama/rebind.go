@@ -13,22 +13,47 @@ import (
 // 不在 init/up 中自动发生；预检不满足时零 rename、零状态写入。
 
 const rebindUsage = "用法：nakama rebind --team <id> [--preflight | --discard-pending] " +
-	"[--confirm-session <owner|worker|advisor|anchor>=<session>]... [--confirm-anchor <terminal>]\n"
+	"[--confirm-session <成员键 O1|W1|A1|anchor>=<session>]... [--confirm-anchor <terminal>]\n"
 
 type rebindOpts struct {
 	team          string
-	confirm       map[string]string // owner|worker|advisor|anchor -> session（仅记录 session 为空时需要）
+	confirm       map[string]string // 成员键或 anchor -> session（仅记录 session 为空时需要）；别名在加载 Team 后规范化
 	confirmAnchor string            // 无 Identity 的 shell 锚点：本次观测到的新 terminal
 	preflight     bool
 	discard       bool
 }
 
+// rebindKeyKnown 只做语法判断：成员键、anchor，或旧别名 owner|worker|advisor（别名须在加载 Team 后按数量解析）。
 func rebindKeyKnown(k string) bool {
 	switch k {
 	case "owner", "worker", "advisor", "anchor":
 		return true
 	}
-	return false
+	return memberKeyRe.MatchString(k)
+}
+
+// normalizeConfirm 在加载 Team 之后、checkPlanConfirm 之前执行：旧别名仅在该类恰好一个成员时解析为其键，
+// 否则要求用成员键；同一成员的别名与键同时给出且值冲突即拒，不依赖遍历顺序覆盖。
+func normalizeConfirm(t *Team, o *rebindOpts) error {
+	out := map[string]string{}
+	for k, v := range o.confirm {
+		key := k
+		if k != "anchor" && !memberKeyRe.MatchString(k) {
+			ms := t.membersOf(k)
+			if len(ms) > 1 {
+				return fmt.Errorf(L("--confirm-session %s 不唯一（编组中有 %d 个 %s），请用成员键（如 W2）"), k, len(ms), k)
+			}
+			if len(ms) == 1 {
+				key = ms[0]
+			}
+		}
+		if prev, dup := out[key]; dup && prev != v {
+			return fmt.Errorf(L("--confirm-session %s 的别名与成员键取值冲突，拒绝"), key)
+		}
+		out[key] = v
+	}
+	o.confirm = out
+	return nil
 }
 
 func parseRebindArgs(args []string) (rebindOpts, bool, error) {
@@ -115,6 +140,9 @@ func (a *app) cmdRebind(args []string) error {
 	if err != nil {
 		return a.fail("%v", err)
 	}
+	if err := normalizeConfirm(t, &o); err != nil {
+		return a.fail("%v", err)
+	}
 	if o.discard {
 		return a.discardRebind(t)
 	}
@@ -171,11 +199,8 @@ func rebindApplicable(t *Team) string {
 	if t.Anchor.PaneID == "" {
 		return L("编组缺少锚点 pane 记录。")
 	}
-	for _, rn := range roleOrder {
+	for _, rn := range t.members() {
 		r := t.role(rn)
-		if r == nil {
-			continue
-		}
 		if !r.Inited || r.Identity == nil {
 			return fmt.Sprintf(L("角色 %s 未完成初始化或缺少冻结身份；rebind 不清空、不补发 init/prompt。"), rn)
 		}
@@ -396,10 +421,8 @@ func (a *app) observeRebindAnchor(t *Team, o rebindOpts, res *rebindResult) {
 // observeRebind 只读：逐角色、锚点观测，汇总问题、需要的确认与待改名步骤。
 func (a *app) observeRebind(t *Team, o rebindOpts) rebindResult {
 	res := rebindResult{used: map[string]bool{}}
-	for _, rn := range roleOrder {
-		if t.role(rn) != nil {
-			a.observeRebindRole(t, rn, o.confirm, &res)
-		}
+	for _, rn := range t.members() {
+		a.observeRebindRole(t, rn, o.confirm, &res)
 	}
 	a.observeRebindAnchor(t, o, &res)
 	var unused []string
@@ -531,8 +554,8 @@ func validatePlanAgainstTeam(t *Team, p *RebindPlan) error {
 			justified[s.Role+":session"] = true
 		}
 	}
-	for _, rn := range roleOrder {
-		if t.role(rn) != nil && !seen[rn] {
+	for _, rn := range t.members() {
+		if !seen[rn] {
 			return fmt.Errorf(L("计划缺少角色 %s"), rn)
 		}
 	}

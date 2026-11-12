@@ -93,14 +93,14 @@ func TestPickCreatesTeamFromPickedEngines(t *testing.T) { // b
 	e.config("normal")
 	e.anchorEnv(t)
 	withTTY(t, true)
-	ok, out := e.pick("\n\n\ny\n") // 三次默认：sol / ds(按角色展开) / none
+	ok, out := e.pick("\n\n\n\ny\n") // 三次默认：sol / ds(按角色展开) / none
 	if !ok {
 		t.Fatalf("应成功：\n%s", out)
 	}
 	has(t, out, "Owner   codex/gpt-6.1-sol:high", "摘要")
 	has(t, out, "Worker  pi/model-x:low", "摘要按角色展开对象别名")
-	eq(t, e.str("roles", "owner", "engine"), "codex/gpt-6.1-sol:high", "Owner 引擎=摘要")
-	eq(t, e.str("roles", "worker", "engine"), "pi/model-x:low", "Worker 引擎=摘要")
+	eq(t, e.str("roles", "O1", "engine"), "codex/gpt-6.1-sol:high", "Owner 引擎=摘要")
+	eq(t, e.str("roles", "W1", "engine"), "pi/model-x:low", "Worker 引擎=摘要")
 	eq(t, e.str("anchor", "pane_id"), "w0:p1", "锚点来自 env 而非 HERDR_PANE_ID")
 	eq(t, e.argvOf("pane", "split", "--pane")[3], "w0:p1", "split 到锚点")
 	for _, v := range e.argvs() {
@@ -115,13 +115,13 @@ func TestPickCreatesTeamFromPickedEngines(t *testing.T) { // b
 	e = newEnv(t)
 	e.config("normal")
 	e.anchorEnv(t)
-	ok, out = e.pick("codex/gpt-6.1-luna:medium\ncodex/gpt-6.1-sol\nnone\nyes\n")
+	ok, out = e.pick("codex/gpt-6.1-luna:medium\ncodex/gpt-6.1-sol\n\nnone\nyes\n")
 	if !ok {
 		t.Fatalf("完整写法应成功：\n%s", out)
 	}
-	eq(t, e.str("roles", "owner", "engine"), "codex/gpt-6.1-luna:medium", "完整写法 Owner")
-	eq(t, e.str("roles", "worker", "engine"), "codex/gpt-6.1-sol", "完整写法 Worker")
-	eq(t, e.str("roles", "advisor"), "<nil>", "Advisor none")
+	eq(t, e.str("roles", "O1", "engine"), "codex/gpt-6.1-luna:medium", "完整写法 Owner")
+	eq(t, e.str("roles", "W1", "engine"), "codex/gpt-6.1-sol", "完整写法 Worker")
+	eq(t, e.str("roles", "A1"), "<nil>", "Advisor none")
 }
 
 func TestPickRepromptsOnInvalid(t *testing.T) { // c
@@ -129,7 +129,7 @@ func TestPickRepromptsOnInvalid(t *testing.T) { // c
 	e.config("normal")
 	e.anchorEnv(t)
 	withTTY(t, true)
-	ok, out := e.pick("bogus\npi/model with space\nnone\n\n\n\ny\n")
+	ok, out := e.pick("bogus\npi/model with space\nnone\n\n\n\n\ny\n")
 	if !ok {
 		t.Fatalf("重问后应成功：\n%s", out)
 	}
@@ -152,13 +152,13 @@ func TestPickCancelAndRejections(t *testing.T) { // d
 		tty bool
 		pre func(e *tenv, t *testing.T)
 	}{
-		"确认答 n":       {"\n\n\nn\n", true, nil},
-		"确认为空(默认 N)":  {"\n\n\n\n", true, nil},
-		"确认前 EOF":     {"\n\n\n", true, nil},
-		"非 TTY":       {"\n\n\ny\n", false, nil},
-		"锚点 env 缺失":   {"\n\n\ny\n", true, func(e *tenv, t *testing.T) { t.Setenv("NAKAMA_ANCHOR_PANE", "") }},
-		"pane get 失败": {"\n\n\ny\n", true, func(e *tenv, t *testing.T) { t.Setenv("NAKAMA_FAKE_PANE_GET_FAIL", "1") }},
-		"cwd 漂移":      {"\n\n\ny\n", true, func(e *tenv, t *testing.T) { t.Setenv("NAKAMA_ANCHOR_CWD", filepath.Join(e.root, "elsewhere")) }},
+		"确认答 n":       {"\n\n\n\nn\n", true, nil},
+		"确认为空(默认 N)":  {"\n\n\n\n\n", true, nil},
+		"确认前 EOF":     {"\n\n\n\n", true, nil},
+		"非 TTY":       {"\n\n\n\ny\n", false, nil},
+		"锚点 env 缺失":   {"\n\n\n\ny\n", true, func(e *tenv, t *testing.T) { t.Setenv("NAKAMA_ANCHOR_PANE", "") }},
+		"pane get 失败": {"\n\n\n\ny\n", true, func(e *tenv, t *testing.T) { t.Setenv("NAKAMA_FAKE_PANE_GET_FAIL", "1") }},
+		"cwd 漂移":      {"\n\n\n\ny\n", true, func(e *tenv, t *testing.T) { t.Setenv("NAKAMA_ANCHOR_CWD", filepath.Join(e.root, "elsewhere")) }},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -209,7 +209,7 @@ func TestPickReleasesLocksBeforeResultPage(t *testing.T) {
 			a := &app{stdout: &buf, stderr: &buf, root: e.repoRoot, st: newStore(), in: bufio.NewReader(pr)}
 			done := make(chan error, 1)
 			go func() { done <- a.cmdPick(nil) }()
-			io.WriteString(pw, "\n\n\ny\n")
+			io.WriteString(pw, "\n\n\n\ny\n")
 			deadline := time.Now().Add(20 * time.Second)
 			for !strings.Contains(buf.String(), "按回车关闭") {
 				if time.Now().After(deadline) {
@@ -290,7 +290,7 @@ func TestPickSignalDuringExecutionExitsWithoutResultPage(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	io.WriteString(in, "\n\n\ny\n")
+	io.WriteString(in, "\n\n\n\ny\n")
 	waitFile(t, filepath.Join(barrier, "ready"))
 	cmd.Process.Signal(syscall.SIGTERM)
 	os.WriteFile(filepath.Join(barrier, "release"), nil, 0o644)
@@ -310,7 +310,7 @@ func TestPickSignalDuringExecutionExitsWithoutResultPage(t *testing.T) {
 	hasNot(t, out.String(), "按回车关闭", "不进入结果页")
 	locks, _ := filepath.Glob(filepath.Join(os.Getenv("HERDR_PLUGIN_STATE_DIR"), "locks", "*.lock"))
 	eq(t, len(locks), 0, "锁已释放")
-	eq(t, e.str("roles", "owner", "pane"), "w0:p10", "在途 split 已落盘")
+	eq(t, e.str("roles", "O1", "pane"), "w0:p10", "在途 split 已落盘")
 	eq(t, e.count("agent", "start"), 0, "之后无 start")
 }
 
@@ -321,7 +321,7 @@ func TestPickSignalInLockReleaseWindow(t *testing.T) {
 	e.anchorEnv(t)
 	withTTY(t, true)
 	var buf syncBuf
-	a := &app{stdout: &buf, stderr: &buf, root: e.repoRoot, st: newStore(), in: bufio.NewReader(strings.NewReader("\n\n\ny\n"))}
+	a := &app{stdout: &buf, stderr: &buf, root: e.repoRoot, st: newStore(), in: bufio.NewReader(strings.NewReader("\n\n\n\ny\n"))}
 	a.beforeUnlock = func() {
 		syscall.Kill(os.Getpid(), syscall.SIGTERM)
 		for i := 0; i < 200 && !a.stop.Load(); i++ {
@@ -348,14 +348,14 @@ func TestPickRefusesTeamCreatedDuringConfirm(t *testing.T) {
 	a := &app{stdout: &buf, stderr: &buf, root: e.repoRoot, st: newStore(), in: bufio.NewReader(pr)}
 	done := make(chan error, 1)
 	go func() { done <- a.cmdPick(nil) }()
-	io.WriteString(pw, "\n\n\n")
+	io.WriteString(pw, "\n\n\n\n")
 	for i := 0; i < 500 && !strings.Contains(buf.String(), "确认建组？"); i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
 	e.mustRun("up", "--pane", "w0:p1")
 	e.stateSet(func(m map[string]any) {
 		m["phase"] = "starting"
-		w := dig(m, "roles", "worker").(map[string]any)
+		w := dig(m, "roles", "W1").(map[string]any)
 		w["pane"], w["launched"], w["launch_identity"], w["identity"] = nil, false, nil, nil
 	})
 	before, _ := os.ReadFile(e.stateFile())
@@ -375,7 +375,7 @@ func TestPickRefusesTeamCreatedDuringConfirm(t *testing.T) {
 
 // F3：EOF 前的半截输入不算确认。
 func TestPickPartialLineIsCancel(t *testing.T) {
-	for _, in := range []string{"\n\n\ny", "\n\n\nyes"} {
+	for _, in := range []string{"\n\n\n\ny", "\n\n\n\nyes"} {
 		e := newEnv(t)
 		e.config("normal")
 		e.anchorEnv(t)
@@ -397,4 +397,41 @@ func TestRealStdinIsTTYRejectsCharDevice(t *testing.T) {
 	os.Stdin = f
 	defer func() { os.Stdin = old }()
 	eq(t, realStdinIsTTY(), false, "/dev/zero 不是 TTY")
+}
+
+// F3：确认答 n 必须到达确认摘要并正常取消（返回 nil、输出“已取消”），零副作用。
+func TestPickDeclineReachesConfirmAndCancels(t *testing.T) {
+	e := newEnv(t)
+	e.config("normal")
+	e.anchorEnv(t)
+	withTTY(t, true)
+	ok, out := e.pick("\n\n\n\nn\n")
+	if !ok {
+		t.Fatalf("确认答 n 应正常取消（返回 nil）：\n%s", out)
+	}
+	has(t, out, "确认建组？", "到达确认摘要")
+	has(t, out, "已取消", "输出取消")
+	e.noSideEffects(t)
+}
+
+// R2：回车取到的默认值不可识别时，与手输一样给出错误并重问；EOF 结束循环，不死循环。
+func TestPickEnterDefaultIsValidatedLikeTypedInput(t *testing.T) {
+	e := newEnv(t)
+	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
+	e.anchorEnv(t)
+	withTTY(t, true)
+	ok, out := e.pick("\n\ncodex/gpt-6.1-luna:medium\n\nnone\ny\n")
+	if !ok {
+		t.Fatalf("应在重问后成功：\n%s", out)
+	}
+	has(t, out, "无法识别的引擎：bogus words", "回车默认值与手输同样校验")
+	eq(t, e.str("roles", "W1", "engine"), "codex/gpt-6.1-luna:medium", "重问后手输的值生效")
+
+	e2 := newEnv(t)
+	e2.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
+	e2.anchorEnv(t)
+	withTTY(t, true)
+	ok, _ = e2.pick("\n\n")
+	eq(t, ok, false, "坏默认值下 EOF 应取消而不是死循环")
+	e2.noSideEffects(t)
 }

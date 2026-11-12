@@ -13,7 +13,7 @@ import (
 )
 
 // 编组变更（add / drop / swap）、[TEAM_UPDATE] 投递，以及任务目录的创建、列出与清理。
-// 不变量：Owner 不可变更；同一时刻只有一个 Worker 实例在册；被替换/移除的实例只记入 retired，
+// 不变量：Owner 不可变更；Worker 1..4、Advisor 0..4 在册；被替换/移除的实例只记入 retired，
 // 不关闭其 pane、不向其发送输入；实例号不复用。
 
 // 取值参数可重复；开关参数出现即记为存在。help=true 表示已输出用法。
@@ -91,26 +91,51 @@ func (a *app) openChange(cliTeam, op string, needVersions bool) (*Team, *config,
 	return t, cfg, nil
 }
 
-func (t *Team) retire(rn, op string) {
-	r := t.role(rn)
-	t.Retired = append(t.Retired, RetiredRole{Role: rn, Name: r.Name, Pane: string(r.Pane), Engine: r.Engine, Instance: r.Instance, At: time.Now().UTC().Format(time.RFC3339), Op: op})
-	t.setRole(rn, nil)
+// retire 把成员移出在册表并记入停用记录；旧键直接删除（不置 null），pane 保留给用户处理。
+func (t *Team) retire(key, op string) {
+	r := t.role(key)
+	t.Retired = append(t.Retired, RetiredRole{Role: kindOf(key), Name: r.Name, Pane: string(r.Pane), Engine: r.Engine, Instance: r.Instance, At: time.Now().UTC().Format(time.RFC3339), Op: op})
+	delete(t.Roles, key)
 }
 
-// 编组发生变更：版本加一，在册且已初始化的角色待投递 [TEAM_UPDATE]。
+// 编组发生变更：版本加一，在册且已初始化的成员待投递 [TEAM_UPDATE]。
 func (t *Team) markUpdate() {
 	t.TeamRev++
-	for _, rn := range roleOrder {
-		if r := t.role(rn); r != nil && r.Inited {
+	for _, key := range t.members() {
+		if r := t.role(key); r.Inited {
 			r.TeamUpdate = true
 		}
 	}
 }
 
+// pickMember 选出被替换 / 移除的同类成员：同类只有一个时可省略 --instance，多个时必须指定实例号。
+// 调用方须先确认 kind 至少有一个在册成员。
+func (a *app) pickMember(t *Team, kind, instance string) (string, error) {
+	keys := t.membersOf(kind)
+	if instance == "" {
+		if len(keys) > 1 {
+			return "", a.fail(L("编组 %s 有 %d 个 %s，请用 --instance 指定实例（如 %s）。"), t.TeamID, len(keys), kind, strconv.Itoa(keyInstance(keys[0])))
+		}
+		return keys[0], nil
+	}
+	n, err := strconv.Atoi(instance)
+	if err != nil || t.role(memberKey(kind, n)) == nil {
+		return "", a.fail(L("编组 %s 没有在册的 %s 实例 %s。"), t.TeamID, kind, instance)
+	}
+	return memberKey(kind, n), nil
+}
+
 func (a *app) cmdAdd(args []string) error {
-	v, help, err := a.parseArgs(args, L("用法：nakama add --team <id> [--engine E]\n"), []string{"--team", "--engine"}, nil)
+	v, help, err := a.parseArgs(args, L("用法：nakama add --team <id> [--role worker|advisor] [--engine E]\n"), []string{"--team", "--role", "--engine"}, nil)
 	if help || err != nil {
 		return err
+	}
+	kind := first(v["--role"])
+	if kind == "" {
+		kind = "advisor"
+	}
+	if kind != "worker" && kind != "advisor" {
+		return a.fail(L("--role 只能是 worker 或 advisor（Owner 不可新增）。"))
 	}
 	t, cfg, err := a.openChange(first(v["--team"]), "add", true)
 	if err != nil {
@@ -122,19 +147,19 @@ func (a *app) cmdAdd(args []string) error {
 	if t.Phase != "initialized" {
 		return a.fail(L("编组 %s 尚未完成初始化（phase=%s）；先 init 再变更。"), t.TeamID, t.Phase)
 	}
-	if t.hasAdvisor() {
-		return a.fail(L("编组 %s 已有独立 Advisor；替换请用 swap --role advisor。"), t.TeamID)
+	if len(t.membersOf(kind)) >= maxPerRole {
+		return a.fail(L("编组 %s 的 %s 已达上限（%d 个）；请先移除或替换。"), t.TeamID, kind, maxPerRole)
 	}
-	return a.changeRole(t, cfg, "advisor", first(v["--engine"]))
+	return a.changeRole(t, cfg, kind, first(v["--engine"]), "")
 }
 
 func (a *app) cmdSwap(args []string) error {
-	v, help, err := a.parseArgs(args, L("用法：nakama swap --team <id> --role worker|advisor [--engine E]\n"), []string{"--team", "--role", "--engine"}, nil)
+	v, help, err := a.parseArgs(args, L("用法：nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]\n"), []string{"--team", "--role", "--instance", "--engine"}, nil)
 	if help || err != nil {
 		return err
 	}
-	rn := first(v["--role"])
-	if rn != "worker" && rn != "advisor" {
+	kind := first(v["--role"])
+	if kind != "worker" && kind != "advisor" {
 		return a.fail(L("--role 只能是 worker 或 advisor（Owner 不可替换）。"))
 	}
 	t, cfg, err := a.openChange(first(v["--team"]), "swap", true)
@@ -147,40 +172,47 @@ func (a *app) cmdSwap(args []string) error {
 	if t.Phase != "initialized" {
 		return a.fail(L("编组 %s 尚未完成初始化（phase=%s）；先 init 再变更。"), t.TeamID, t.Phase)
 	}
-	if t.role(rn) == nil {
+	if len(t.membersOf(kind)) == 0 {
 		return a.fail(L("编组 %s 没有独立 Advisor；请用 add。"), t.TeamID)
 	}
-	return a.changeRole(t, cfg, rn, first(v["--engine"]))
+	key, err := a.pickMember(t, kind, first(v["--instance"]))
+	if err != nil {
+		return err
+	}
+	return a.changeRole(t, cfg, kind, first(v["--engine"]), key)
 }
 
-// 新增或替换一个角色实例：全部校验通过后才写状态，随后 split + 启动；初始化仍由 init 完成。
-func (a *app) changeRole(t *Team, cfg *config, rn, cliEngine string) error {
-	old := t.role(rn)
+// 新增（oldKey 为空）或替换（oldKey 为被替换的成员键）一个角色实例：全部校验通过后才写状态，随后 split + 启动；初始化仍由 init 完成。
+func (a *app) changeRole(t *Team, cfg *config, kind, cliEngine, oldKey string) error {
+	var old *Role
 	raw := cliEngine
-	if raw == "" && old != nil {
-		raw = old.Engine
+	if oldKey != "" {
+		old = t.role(oldKey)
+		if raw == "" {
+			raw = old.Engine
+		}
 	}
-	eng, err := cfg.pickEngine(rn, raw)
+	eng, err := cfg.pickEngine(kind, raw)
 	if err != nil {
 		return a.fail("%v", err)
 	}
 	if _, ok := parseEngine(eng); !ok || eng == "none" {
-		return a.fail(L("无法识别 %s 引擎：%s"), rn, eng)
+		return a.fail(L("无法识别 %s 引擎：%s"), kind, eng)
 	}
 	if !a.requireEngine(eng) {
-		return a.fail(L("%s 引擎前置不满足，停止（未创建任何 pane）。"), rn)
+		return a.fail(L("%s 引擎前置不满足，停止（未创建任何 pane）。"), kind)
 	}
-	inst := t.nextInstance(rn)
-	name := roleName(t.Prefix, rn, inst)
+	inst := t.nextInstance(kind)
+	name := roleName(t.Prefix, kind, inst)
 	if !nameValid(name) {
 		return a.fail(L("角色名不符合 Herdr NAME 规则（小写字母开头、[a-z0-9_-]、1-32 字符）：%s"), name)
 	}
 	if old != nil {
-		a.warnf(L("旧 %s（%s，pane %s）已停用但未关闭：请确认它已停止写入后自行处理该 pane。"), rn, old.Name, old.Pane)
-		t.retire(rn, "swap")
+		a.warnf(L("旧 %s（%s，pane %s）已停用但未关闭：请确认它已停止写入后自行处理该 pane。"), oldKey, old.Name, old.Pane)
+		t.retire(oldKey, "swap")
 	}
 	t.markUpdate()
-	t.setRole(rn, &Role{Name: name, Engine: eng, Instance: inst})
+	t.addRole(memberKey(kind, inst), &Role{Name: name, Engine: eng, Instance: inst})
 	t.Phase = "changing"
 	if err := a.save(t); err != nil {
 		return err
@@ -199,9 +231,12 @@ func (a *app) finishPrevious(t *Team) error {
 
 // 补齐变更中缺失的 split / 启动步骤；失败后重跑同一命令或 up 继续。Owner 不可变更，不在补齐范围。
 func (a *app) resumeChange(t *Team) error {
-	for _, rn := range []string{"worker", "advisor"} {
-		if r := t.role(rn); r != nil && (r.Pane == "" || !r.Launched) {
-			if err := a.ensureRole(t, rn); err != nil {
+	for _, key := range t.members() {
+		if kindOf(key) == "owner" {
+			continue
+		}
+		if r := t.role(key); r.Pane == "" || !r.Launched {
+			if err := a.ensureRole(t, key); err != nil {
 				a.errf(L("编组变更未完成；核对后重跑同一命令或 up 继续。"))
 				return err
 			}
@@ -217,9 +252,16 @@ func (a *app) resumeChange(t *Team) error {
 }
 
 func (a *app) cmdDrop(args []string) error {
-	v, help, err := a.parseArgs(args, L("用法：nakama drop --team <id>\n"), []string{"--team"}, nil)
+	v, help, err := a.parseArgs(args, L("用法：nakama drop --team <id> [--role worker|advisor] [--instance N]\n"), []string{"--team", "--role", "--instance"}, nil)
 	if help || err != nil {
 		return err
+	}
+	kind := first(v["--role"])
+	if kind == "" {
+		kind = "advisor"
+	}
+	if kind != "worker" && kind != "advisor" {
+		return a.fail(L("--role 只能是 worker 或 advisor（Owner 不可移除）。"))
 	}
 	t, _, err := a.openChange(first(v["--team"]), "drop", false)
 	if err != nil {
@@ -231,12 +273,19 @@ func (a *app) cmdDrop(args []string) error {
 	if t.Phase != "initialized" && t.Phase != "launched" {
 		return a.fail(L("编组 %s 尚未完成初始化（phase=%s）；先 init 再变更。"), t.TeamID, t.Phase)
 	}
-	if !t.hasAdvisor() {
+	if len(t.membersOf(kind)) == 0 {
 		return a.fail(L("编组 %s 没有独立 Advisor；请用 add。"), t.TeamID)
 	}
-	old := t.Roles.Advisor
-	a.warnf(L("旧 %s（%s，pane %s）已停用但未关闭：请确认它已停止写入后自行处理该 pane。"), "advisor", old.Name, old.Pane)
-	t.retire("advisor", "drop")
+	if kind == "worker" && len(t.membersOf("worker")) <= 1 {
+		return a.fail(L("编组 %s 只剩一个 Worker，不可移除；请用 swap 替换。"), t.TeamID)
+	}
+	key, err := a.pickMember(t, kind, first(v["--instance"]))
+	if err != nil {
+		return err
+	}
+	old := t.role(key)
+	a.warnf(L("旧 %s（%s，pane %s）已停用但未关闭：请确认它已停止写入后自行处理该 pane。"), key, old.Name, old.Pane)
+	t.retire(key, "drop")
 	t.markUpdate()
 	if err := a.save(t); err != nil {
 		return err
@@ -252,9 +301,9 @@ func (a *app) cmdDrop(args []string) error {
 // 其余保留标记，由下一次 init 再投。返回 false 表示仍有未投递项。
 func (a *app) deliverTeamUpdates(t *Team) bool {
 	all := true
-	for _, rn := range []string{"worker", "advisor", "owner"} {
+	for _, rn := range t.initOrder() {
 		r := t.role(rn)
-		if r == nil || !r.TeamUpdate {
+		if !r.TeamUpdate {
 			continue
 		}
 		if !r.Inited || r.Stale || r.Identity == nil {
@@ -541,10 +590,8 @@ func (a *app) tasksIdle(t *Team) bool {
 		retired bool
 	}
 	var ws []w
-	for _, rn := range []string{"worker", "advisor"} {
-		if r := t.role(rn); r != nil {
-			ws = append(ws, w{r.Name, false})
-		}
+	for _, key := range append(t.membersOf("worker"), t.membersOf("advisor")...) {
+		ws = append(ws, w{t.role(key).Name, false})
 	}
 	for _, x := range t.Retired {
 		ws = append(ws, w{x.Name, true})
