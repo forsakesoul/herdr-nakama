@@ -38,6 +38,19 @@ cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
 herdr server reload-config
 ```
 
+### Without Go: use a release package
+
+The release archive already contains the compiled binary, so you need neither Go nor a clone:
+
+```sh
+arch="$(uname -m | sed 's/x86_64/amd64/')"
+dir="$HOME/.local/share/herdr-nakama"
+mkdir -p "$dir" && curl -fsSL "https://github.com/forsakesoul/herdr-nakama/releases/latest/download/nakama-darwin-$arch.tar.gz" | tar -xz -C "$dir" --strip-components=1
+herdr plugin link "$dir" --enabled
+```
+
+To pin a version, replace `latest/download` with `download/v0.0.3`. Re-run the same block to upgrade. Packages are provided from v0.0.3 onward.
+
 Key binding example (`config.toml`):
 
 ```toml
@@ -87,6 +100,8 @@ herdr plugin action list --plugin forsakesoul.nakama
 ```
 
 `up` / `init` require a pane context (`contexts = ["pane"]`); `status` is global and read-only.
+
+Maintainers: to release, change `version` in `herdr-plugin.toml` in a PR. After the PR is merged to `main`, `.github/workflows/release.yml` creates the `v<version>` release and uploads the packages automatically; no manual tag is needed.
 
 ## Configuration
 

@@ -38,6 +38,19 @@ cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
 herdr server reload-config
 ```
 
+### 不装 Go：用发布包
+
+发布包内已含编译好的二进制，无需安装 Go，也无需 clone：
+
+```sh
+arch="$(uname -m | sed 's/x86_64/amd64/')"
+dir="$HOME/.local/share/herdr-nakama"
+mkdir -p "$dir" && curl -fsSL "https://github.com/forsakesoul/herdr-nakama/releases/latest/download/nakama-darwin-$arch.tar.gz" | tar -xz -C "$dir" --strip-components=1
+herdr plugin link "$dir" --enabled
+```
+
+固定版本时把 `latest/download` 换成 `download/v0.0.3`；升级时重新执行同一段。从 v0.0.3 起提供。
+
 快捷键示例（`config.toml`）：
 
 ```toml
@@ -87,6 +100,8 @@ herdr plugin action list --plugin forsakesoul.nakama
 ```
 
 `up` / `init` 需要 pane 上下文（`contexts = ["pane"]`），`status` 为全局只读。
+
+维护者：发版时在 PR 中修改 `herdr-plugin.toml` 的 `version`。PR 合并到 `main` 后，`.github/workflows/release.yml` 会自动创建 `v<version>` 的 release 并上传安装包，无需手动打 tag。
 
 ## 配置
 
