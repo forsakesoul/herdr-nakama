@@ -4,9 +4,9 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 Turn several coding agents in [Herdr](https://herdr.dev) into a team with clear roles: one Owner designs and accepts the work, 1–4 Workers implement it, and 0–4 optional Advisors review it independently. Nakama is a native Herdr plugin that creates the team, initializes it, adds or removes members mid-task, and brings the same team back after a computer or Herdr restart.
 
-https://github.com/user-attachments/assets/86f9437b-d14b-41a9-bedc-cb5275c13ef6
+https://github.com/user-attachments/assets/861b71da-e0f5-4123-bc7f-5a1b3bc27bec
 
-▶ 109-second usage video · [中文版](https://github.com/user-attachments/assets/f69aecbb-17f8-433a-890e-916445d518fb) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
+▶ 109-second usage video · [中文版](https://github.com/user-attachments/assets/f2b21f2f-da61-4832-9113-158efeb8f4ec) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
 
 ## Nakama at a glance
 

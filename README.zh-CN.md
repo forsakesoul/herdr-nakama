@@ -4,9 +4,9 @@
 
 在 [Herdr](https://herdr.dev) 里把多个编码 agent 组成一支分工明确的小队：1 个 Owner 负责设计与验收，1–4 个 Worker 负责实现，0–4 个可选 Advisor 负责独立审查。Nakama 是 Herdr 原生插件，负责建组、初始化、中途增减成员，并在电脑或 Herdr 重启后把同一支队伍找回来。
 
-https://github.com/user-attachments/assets/f69aecbb-17f8-433a-890e-916445d518fb
+https://github.com/user-attachments/assets/f2b21f2f-da61-4832-9113-158efeb8f4ec
 
-▶ 109 秒使用演示 · [English version](https://github.com/user-attachments/assets/86f9437b-d14b-41a9-bedc-cb5275c13ef6) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
+▶ 109 秒使用演示 · [English version](https://github.com/user-attachments/assets/861b71da-e0f5-4123-bc7f-5a1b3bc27bec) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 一张图看懂 Nakama
 

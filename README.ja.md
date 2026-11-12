@@ -4,9 +4,9 @@
 
 [Herdr](https://herdr.dev) 上の複数のコーディングエージェントを、役割のはっきりしたチームにまとめます。Owner 1 名が設計と受け入れを担い、Worker 1〜4 名が実装し、任意の Advisor 0〜4 名が独立してレビューします。Nakama は Herdr ネイティブプラグインで、チームの作成、初期化、タスク途中のメンバー追加・削除を行い、コンピューターや Herdr の再起動後には同じチームを復元します。
 
-https://github.com/user-attachments/assets/86f9437b-d14b-41a9-bedc-cb5275c13ef6
+https://github.com/user-attachments/assets/861b71da-e0f5-4123-bc7f-5a1b3bc27bec
 
-▶ 109 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/f69aecbb-17f8-433a-890e-916445d518fb) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
+▶ 109 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/f2b21f2f-da61-4832-9113-158efeb8f4ec) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 図でわかる Nakama（英語版）
 
