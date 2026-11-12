@@ -4,15 +4,15 @@
 
 在 [Herdr](https://herdr.dev) 里创建、初始化和恢复 Owner / Worker / Advisor 三角色编码 agent 编组的**Herdr 原生插件**（Go 实现，仅用标准库）。
 
-https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0
+https://github.com/user-attachments/assets/f69aecbb-17f8-433a-890e-916445d518fb
 
-▶ 97 秒使用演示 · [English version](https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
+▶ 109 秒使用演示 · [English version](https://github.com/user-attachments/assets/86f9437b-d14b-41a9-bedc-cb5275c13ef6) · [项目主页](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 一张图看懂 Nakama
 
-![herdr-nakama 概览：Herdr 提供终端工作台，Nakama 创建和初始化 Owner、Worker 与可选 Advisor 编组，并支持查看状态和重启后重新绑定。](docs/media/nakama-overview-zh.png)
+![herdr-nakama 概览：1 个 Owner、1–4 个 Worker 与 0–4 个可选 Advisor 按角色协作；Nakama 负责选人数建组、初始化、查看状态、重启后重新绑定，以及中途添加、移除或替换成员。](docs/media/nakama-overview-zh.png)
 
-图中的“独立窗口”对应 Herdr 的独立 pane；角色分工由提示词和协作协议约定。具体操作与恢复条件见下文。
+每个成员在同一个 Herdr 标签页的独立 pane 中运行；角色分工由提示词和协作协议约定，多个 Worker 各自只修改互不重叠的范围。具体操作与恢复条件见下文。
 
 ## 为什么叫 Nakama
 

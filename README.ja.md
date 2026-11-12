@@ -4,15 +4,15 @@
 
 [Herdr](https://herdr.dev) 上で Owner / Worker / Advisor の 3 ロールからなるコーディングエージェントのチームを作成・初期化・復元する **Herdr ネイティブプラグイン**です（Go 実装、標準ライブラリのみ使用）。
 
-https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702
+https://github.com/user-attachments/assets/86f9437b-d14b-41a9-bedc-cb5275c13ef6
 
-▶ 97 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
+▶ 109 秒の使い方紹介（英語音声）· [中文版](https://github.com/user-attachments/assets/f69aecbb-17f8-433a-890e-916445d518fb) · [プロジェクトページ](https://forsakesoul.github.io/herdr-nakama/)
 
 ## 図でわかる Nakama（英語版）
 
-![herdr-nakama の概要（英語）：Herdr がターミナル環境を提供し、Nakama が Owner・Worker・任意の Advisor のチームを作成・初期化します。状態確認と再起動後の再バインドにも対応します。](docs/media/nakama-overview-en.png)
+![herdr-nakama の概要（英語）：Owner 1 名、Worker 1〜4 名、任意の Advisor 0〜4 名が役割に沿って協働します。Nakama は人数を選んでのチーム作成、初期化、状態確認、再起動後の再バインド、タスク途中のメンバー追加・削除・交代を担います。](docs/media/nakama-overview-en.png)
 
-各ロールは Herdr の独立した pane で動作し、役割分担はプロンプトと共有の協働プロトコルで定められます。具体的な操作と復元条件は以下を参照してください。
+各メンバーは同じ Herdr タブ内の独立した pane で動作し、役割分担はプロンプトと共有の協働プロトコルで定められます。複数の Worker はそれぞれ重ならない範囲だけを変更します。具体的な操作と復元条件は以下を参照してください。
 
 ## なぜ「Nakama」なのか
 

@@ -4,15 +4,15 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 A **native [Herdr](https://herdr.dev) plugin** that creates, initializes and restores three-role coding-agent teams (Owner / Worker / Advisor). Written in Go using only the standard library.
 
-https://github.com/user-attachments/assets/4e2de426-f405-45f0-b893-26a8cbc19702
+https://github.com/user-attachments/assets/86f9437b-d14b-41a9-bedc-cb5275c13ef6
 
-▶ 97-second usage video · [中文版](https://github.com/user-attachments/assets/7ae62131-8042-434e-93c7-6c0ac5361ce0) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
+▶ 109-second usage video · [中文版](https://github.com/user-attachments/assets/f69aecbb-17f8-433a-890e-916445d518fb) · [Project page](https://forsakesoul.github.io/herdr-nakama/)
 
 ## Nakama at a glance
 
-![herdr-nakama overview: Herdr provides the terminal workspace; Nakama creates and initializes Owner, Worker and optional Advisor teams, shows their status and rebinds them after a restart.](docs/media/nakama-overview-en.png)
+![herdr-nakama overview: one Owner, 1–4 Workers and 0–4 optional Advisors work in defined roles; Nakama creates the team with the counts you choose, initializes it, shows its status, rebinds it after a restart, and adds, removes or replaces members mid-task.](docs/media/nakama-overview-en.png)
 
-Each role runs in a separate Herdr pane; role responsibilities are defined by prompts and a shared collaboration protocol. See below for operating instructions and recovery conditions.
+Each member runs in its own pane within the same Herdr tab; role responsibilities are defined by prompts and a shared collaboration protocol, and each Worker edits only its own non-overlapping scope. See below for operating instructions and recovery conditions.
 
 ## Why "Nakama"
 
