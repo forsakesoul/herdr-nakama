@@ -117,12 +117,26 @@ func TestMappingSingleMatchesLegacyAndMultiListsEachMember(t *testing.T) {
 }
 
 func TestV4StrictValidation(t *testing.T) {
+	// 每个用例只引入一处非法：其余字段保持完整合法（复制一份完整的 W1 对象）。
+	copyW1 := func(m map[string]any) map[string]any {
+		src := m["roles"].(map[string]any)["W1"].(map[string]any)
+		c := map[string]any{}
+		for k, v := range src {
+			c[k] = v
+		}
+		return c
+	}
 	cases := map[string]func(m map[string]any){
-		"旧键混入":        func(m map[string]any) { m["roles"].(map[string]any)["worker"] = map[string]any{"name": "x"} },
+		"旧键混入":        func(m map[string]any) { m["roles"].(map[string]any)["worker"] = copyW1(m) },
 		"成员为 null":    func(m map[string]any) { m["roles"].(map[string]any)["W1"] = nil },
 		"Worker 数为 0": func(m map[string]any) { delete(m["roles"].(map[string]any), "W1") },
-		"key 与实例不一致":  func(m map[string]any) { dig(m, "roles", "W1").(map[string]any)["instance"] = 2 },
-		"未知成员键":       func(m map[string]any) { m["roles"].(map[string]any)["X1"] = map[string]any{} },
+		"key 与实例不一致": func(m map[string]any) {
+			w := copyW1(m)
+			w["instance"] = 2
+			w["name"] = m["team_id"].(string) + "_execute2"
+			m["roles"].(map[string]any)["W1"] = w
+		},
+		"未知成员键": func(m map[string]any) { m["roles"].(map[string]any)["X1"] = copyW1(m) },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

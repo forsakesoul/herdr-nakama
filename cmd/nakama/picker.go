@@ -98,10 +98,14 @@ func (a *app) askEngine(cfg *config, role, label string, allowNone bool, def str
 			a.outf("%s", L("没有默认值，请输入。\n"))
 			continue
 		}
-		eng, err := cfg.pickEngine(role, in)
-		if err != nil {
-			a.outf("%v\n", err)
-			continue
+		// 回车取 def：def 已是解析后的引擎，不经 pickEngine 再解析（engine_map 不保证幂等）；
+		// 但之后的 none / 无法识别 / 嵌套检查对回车与手输一视同仁。
+		eng := def
+		if in != "" {
+			if eng, err = cfg.pickEngine(role, in); err != nil {
+				a.outf("%v\n", err)
+				continue
+			}
 		}
 		if eng == "none" || in == "none" {
 			if allowNone {

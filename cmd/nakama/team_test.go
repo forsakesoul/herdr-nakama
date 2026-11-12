@@ -511,40 +511,42 @@ func TestStateValidationRejects(t *testing.T) { // F8
 	e.config("codex")
 	e.mustRun("up")
 	id := e.teamID()
+	// 合法快照：先证明 status 成功，之后每个用例都从它出发，互不叠加。
+	orig, err := os.ReadFile(e.stateFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.mustRun("status", "--team", id)
 	reject := func(msg string, mut func(m map[string]any), want string) {
 		t.Helper()
+		if err := os.WriteFile(e.stateFile(), orig, 0o600); err != nil {
+			t.Fatal(err)
+		}
 		e.stateSet(mut)
 		out := e.mustFail("status", "--team", id)
-		if want != "" {
-			has(t, out, want, msg)
-		}
+		has(t, out, want, msg)
 	}
-	reject("schema 999", func(m map[string]any) { m["schema_version"] = 999 }, "校验失败")
+	reject("schema 999", func(m map[string]any) { m["schema_version"] = 999 }, "状态文件校验失败")
+	// phase=launched 时 Owner pane 必须非空（唯一的非法改动）。
 	reject("pane=null", func(m map[string]any) {
-		m["schema_version"] = 1
 		dig(m, "roles", "O1").(map[string]any)["pane"] = nil
-	}, "")
+	}, "状态文件校验失败")
 	reject("inited 无身份", func(m map[string]any) {
-		o := dig(m, "roles", "O1").(map[string]any)
-		o["pane"], o["inited"], o["identity"] = "w0:p10", true, nil
-	}, "")
+		dig(m, "roles", "O1").(map[string]any)["inited"] = true
+		dig(m, "roles", "O1").(map[string]any)["identity"] = nil
+	}, "状态文件校验失败")
 	reject("team_id 不一致", func(m map[string]any) {
-		o := dig(m, "roles", "O1").(map[string]any)
-		o["inited"] = false
 		m["team_id"] = "mismatch"
 	}, "不一致")
 	reject("instance 1.5", func(m map[string]any) {
-		m["team_id"] = id
 		dig(m, "roles", "W1").(map[string]any)["instance"] = 1.5
-	}, "校验失败")
+	}, "状态文件校验失败")
 	reject("角色名不匹配", func(m map[string]any) {
-		w := dig(m, "roles", "W1").(map[string]any)
-		w["instance"], w["name"] = 1, "wrong_role"
-	}, "")
-	e.stateSet(func(m map[string]any) { dig(m, "roles", "W1").(map[string]any)["name"] = id + "_execute" })
-	b, _ := os.ReadFile(e.stateFile())
+		dig(m, "roles", "W1").(map[string]any)["name"] = "wrong_role"
+	}, "状态文件校验失败")
+	// 文件名与 team_id 不一致：基于合法快照写 foo.json。
 	foo := filepath.Join(filepath.Dir(e.stateFile()), "foo.json")
-	os.WriteFile(foo, b, 0o600)
+	os.WriteFile(foo, orig, 0o600)
 	has(t, e.mustFail("status", "--team", "foo"), "文件名与 team_id 不一致", "文件名拒绝")
 }
 

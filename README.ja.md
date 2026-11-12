@@ -135,7 +135,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <O1|W1|A1|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <メンバーキー|anchor>=<session>]... [--confirm-anchor <terminal>]
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
@@ -194,7 +194,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 
 **手順。**
 1. まず読み取り専用のプリフライト（書き込みゼロ）を実行：`nakama rebind --team <id> --preflight`。ロールとアンカーごとに `terminal 旧 → 新`、session とタスク名の差分を出力します。
-2. 出力に従って確認引数を加えて実行：`nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal> [--confirm-session <O1|W1|A1|anchor>=<session>]...`。
+2. 出力に従って確認引数を加えて実行：`nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal> [--confirm-session <メンバーキー|anchor>=<session>]...`。メンバーキーは O1、W1、W2、A1… の形です（例：`--confirm-session W2=<session>` は 2 番目の Worker の session を確認します）。
    - `--confirm-session` は記録された session が空のロール（例：最初の prompt 前に固定された codex）専用で、値は今回観測された非空の session と一致する必要があります。
    - `--confirm-anchor` は identity を持たないシェルアンカー専用で、値は今回観測された新しい terminal と一致する必要があります。
    - 記録された session が非空のロールは確認による上書きを受け付けず、観測値が記録と一致する必要があります。

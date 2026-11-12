@@ -94,7 +94,7 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 		eq(t, string(readState(t, e)), string(before), "状态字节不变")
 	})
 
-	t.Run("计划包含编组不存在的 advisor：拒绝且不 panic", func(t *testing.T) {
+	t.Run("计划包含编组不存在的成员 A9：拒绝且不 panic", func(t *testing.T) {
 		e, id := rebindSetup(t, true, false)
 		restart(e, restartOpt{auto: true})
 		t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
@@ -105,14 +105,15 @@ func TestRebindResumeRevalidatesWholePlan(t *testing.T) {
 			for k, v := range planSteps(m)[0].(map[string]any) {
 				extra[k] = v
 			}
-			extra["role"] = "advisor"
+			extra["role"] = "A9" // 格式合法（A 类、实例 9），本组只有 O1/W1，不存在
 			p["steps"] = append(planSteps(m), extra)
 		})
 		before, renames := readState(t, e), e.count("agent", "rename")
-		ok, _ := e.run("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
+		ok, out := e.run("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
 		if ok {
-			t.Fatal("伪造的 advisor 步骤应拒绝")
+			t.Fatal("伪造的成员步骤应拒绝")
 		}
+		has(t, out, "计划包含编组中不存在或未冻结的角色 A9", "拒绝原因是计划引用了不存在的成员")
 		eq(t, e.count("agent", "rename"), renames, "零 rename")
 		eq(t, string(readState(t, e)), string(before), "状态字节不变")
 	})

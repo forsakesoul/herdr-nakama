@@ -298,4 +298,4 @@ applies to every team and every role; the team only decides recipients and the r
 - It is a control message: it has no number, gets no ACK, and does not change the task_id, handoff version, frozen scope or authorization.
 - Replaced or removed instances are listed under "Retired instances": send them no new work or resume instructions, and treat their late reports only as historical evidence.
 - For an unsettled request sent to a retired instance, the Owner verifies that it has stopped writing, records SUPERSEDED through the replacement flow, and sends a self-contained handoff to the new instance under a new req; the new instance uses the new instance number from the mapping, starts its sequence at 000 and does not inherit the old instance's hidden context.
-- After the Advisor is removed, the Owner takes over review under the rules for a team with no independent Advisor.
+- After an Advisor is removed, if no independent Advisor remains, the Owner takes over review under the rules for a team with no independent Advisor.

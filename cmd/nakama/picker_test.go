@@ -413,3 +413,25 @@ func TestPickDeclineReachesConfirmAndCancels(t *testing.T) {
 	has(t, out, "已取消", "输出取消")
 	e.noSideEffects(t)
 }
+
+// R2：回车取到的默认值不可识别时，与手输一样给出错误并重问；EOF 结束循环，不死循环。
+func TestPickEnterDefaultIsValidatedLikeTypedInput(t *testing.T) {
+	e := newEnv(t)
+	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
+	e.anchorEnv(t)
+	withTTY(t, true)
+	ok, out := e.pick("\n\ncodex/gpt-6.1-luna:medium\n\nnone\ny\n")
+	if !ok {
+		t.Fatalf("应在重问后成功：\n%s", out)
+	}
+	has(t, out, "无法识别的引擎：bogus words", "回车默认值与手输同样校验")
+	eq(t, e.str("roles", "W1", "engine"), "codex/gpt-6.1-luna:medium", "重问后手输的值生效")
+
+	e2 := newEnv(t)
+	e2.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
+	e2.anchorEnv(t)
+	withTTY(t, true)
+	ok, _ = e2.pick("\n\n")
+	eq(t, ok, false, "坏默认值下 EOF 应取消而不是死循环")
+	e2.noSideEffects(t)
+}

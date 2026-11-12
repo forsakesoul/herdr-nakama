@@ -135,7 +135,7 @@ Changing shared protocol content changes `protocol_version` for that language. T
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <O1|W1|A1|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <member-key|anchor>=<session>]... [--confirm-anchor <terminal>]
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
@@ -194,7 +194,7 @@ Task names may be cleared, or auto-renamed by an external tool (Bridge) to `<pro
 
 **What to do.**
 1. Run a read-only preflight first (zero writes): `nakama rebind --team <id> --preflight`. It prints, per role and anchor, `terminal old → new` and the differences in session and task name.
-2. Add the confirmation arguments from the output and run: `nakama rebind --team <id> --confirm-anchor <new anchor terminal> [--confirm-session <O1|W1|A1|anchor>=<session>]...`.
+2. Add the confirmation arguments from the output and run: `nakama rebind --team <id> --confirm-anchor <new anchor terminal> [--confirm-session <member-key|anchor>=<session>]...`. The member key is O1, W1, W2, A1… (for example `--confirm-session W2=<session>` confirms the session of the second Worker).
    - `--confirm-session` is only for roles whose recorded session is empty (e.g. codex frozen before its first prompt); the value must equal the non-empty session observed now.
    - `--confirm-anchor` is only for shell anchors without an identity; the value must equal the new terminal observed now.
    - Roles with a non-empty recorded session accept no confirmation override: the observation must equal the record.

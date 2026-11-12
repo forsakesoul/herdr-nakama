@@ -135,7 +135,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <O1|W1|A1|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <成员键|anchor>=<session>]... [--confirm-anchor <terminal>]
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
@@ -194,7 +194,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 
 **怎么做。**
 1. 先只读预检（零写入）：`nakama rebind --team <id> --preflight`。它逐角色、逐锚点输出 `terminal 旧 → 新`、session 与任务名的差异。
-2. 按输出补充确认参数后执行：`nakama rebind --team <id> --confirm-anchor <新锚点 terminal> [--confirm-session <O1|W1|A1|anchor>=<session>]...`。
+2. 按输出补充确认参数后执行：`nakama rebind --team <id> --confirm-anchor <新锚点 terminal> [--confirm-session <成员键|anchor>=<session>]...`。成员键形如 O1、W1、W2、A1…（例如 `--confirm-session W2=<session>` 确认第二个 Worker 的 session）。
    - `--confirm-session` 只用于记录 session 为空的角色（例如 codex 首次 prompt 前冻结的），值必须等于本次观测到的非空 session。
    - `--confirm-anchor` 只用于没有 identity 的 shell 锚点，值必须等于本次观测到的新 terminal。
    - 记录 session 非空的角色不接受确认覆盖：观测必须与记录相等。

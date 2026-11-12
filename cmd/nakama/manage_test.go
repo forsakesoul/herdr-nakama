@@ -366,3 +366,22 @@ func toLegacy(m map[string]any) {
 	}
 	m["roles"] = out
 }
+
+// PR #9 修复：替换菜单回车采用成员当前引擎（提示中的默认值），不回落到 profile 默认。
+func TestTeamMenuReplaceEnterKeepsMemberEngine(t *testing.T) {
+	e := newEnv(t)
+	e.config("normal") // profile 的 worker 默认为 pi/model-x:low
+	e.mustRun("up", "--worker", "cc")
+	id := e.teamID()
+	e.mustRun("init", "--team", id)
+	e.anchorEnv(t)
+	withTTY(t, true)
+	t.Setenv("NAKAMA_ANCHOR_PANE", e.str("roles", "O1", "pane"))
+	ok, out := e.pick("w\n\ny\n")
+	if !ok {
+		t.Fatalf("菜单替换应成功：\n%s", out)
+	}
+	has(t, out, "Worker 引擎 [默认 cc]", "提示默认为成员当前引擎")
+	has(t, out, "替换 W1 → cc", "确认摘要使用成员当前引擎")
+	eq(t, e.str("roles", "W2", "engine"), "cc", "回车后替换实例沿用成员当前引擎")
+}
