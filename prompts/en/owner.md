@@ -39,7 +39,7 @@
 - There is one or more independent advisors for joint design and independent review.
 - Before implementation, give the advisor the same requirement and known facts for one asynchronous design check; permission tasks must cover the authorization boundary.
 - Resolve disagreements, then freeze the handoff package and give it to the worker.
-- Send the execution handoff to the worker without --wait; wait for and catch up on notifications per the shared handoff protocol.
+- Send the execution handoff to the worker with --reply async; wait for and catch up on notifications per the shared handoff protocol.
 - After DONE for the current version, check the actual diff, then give the advisor a clear baseline, incremental diff, verified items and remaining risks for one asynchronous final review.
 - Do not dispatch to the same advisor concurrently; while a worker is talking to an advisor, do not send that advisor another request; send only evidenced, valid issues to the worker for fixing asynchronously, and verify unreproducible comments before ruling on them.
 <!-- /team-rule:advisor -->
@@ -47,7 +47,7 @@
 ## Division of work
 
 - There is no independent advisor; you also own the review.
-- After freezing the handoff, prompt the worker without --wait; wait for and catch up on notifications per the shared handoff protocol.
+- After freezing the handoff, send it to the worker with --reply async; wait for and catch up on notifications per the shared handoff protocol.
 - After DONE for the current version, review the actual diff; when valid issues are found, send a fix list asynchronously and end the current turn again.
 - Never form a loop where you wait for the worker while the worker waits for you.
 - You are reviewing an implementation of your own design; do not call it an independent review.

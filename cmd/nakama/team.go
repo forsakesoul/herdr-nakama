@@ -485,7 +485,16 @@ func (a *app) cmdUp(args []string) error {
 		a.outf("- %s %s pane %s：%s\n", kindOf(key), key, t.role(key).Pane, a.hint(t.role(key).Engine))
 	}
 	a.outf("%s", L("- cc/ccenv/pi 需等 Herdr 识别（herdr agent list）后运行 nakama init\n"))
-	return nil
+	return a.autoInit(cfg, t)
+}
+
+// auto_init 打开时接着初始化。init 自己取 team 锁，而本插件的锁不可重入，所以先放掉建组 / 变更持有的锁。
+func (a *app) autoInit(cfg *config, t *Team) error {
+	if !cfg.autoInit() {
+		return nil
+	}
+	a.unlockAll()
+	return a.cmdInit([]string{"--team", t.TeamID})
 }
 
 // 已存在编组：在 team 锁内重读状态后再决策。
@@ -992,6 +1001,7 @@ func (a *app) statusTeam(t *Team) {
 			files, size = files+k.files, size+k.size
 		}
 		a.outf("  task_dir=%s tasks=%d files=%d size=%s\n", t.TaskDir, len(tasks), files, humanSize(size))
+		a.statusTasks(t)
 	}
 	if candidate {
 		a.outf(L("  提示：存在 candidate（同 pane/kind 的候选，不保证可重绑）：可能需要显式 rebind --team %s，请先 --preflight 核对；status 不改动状态。\n"), t.TeamID)

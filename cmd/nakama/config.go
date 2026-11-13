@@ -48,6 +48,12 @@ func (c *config) profileStr(key string) string {
 func (c *config) piProvider() string { return c.profileStr("pi_provider") }
 func (c *config) ccEnvFile() string  { return c.profileStr("cc_env_file") }
 
+// 建组 / 加人 / 换人后是否接着初始化；缺省关闭，留给用户先核对各 pane 的模型与权限。
+func (c *config) autoInit() bool {
+	b, _ := asMap(c.root["default_profile"])["auto_init"].(bool)
+	return b
+}
+
 // 引擎解析：简写经 engine_map 展开（值可为字符串或按角色的对象），否则视作完整引擎串。
 func (c *config) resolveEngine(input, role string) string {
 	switch v := asMap(asMap(c.root["default_profile"])["engine_map"])[input].(type) {

@@ -348,6 +348,7 @@ func newStore() store {
 
 func (s store) teamsDir() string      { return filepath.Join(s.dir, "teams") }
 func (s store) locksDir() string      { return filepath.Join(s.dir, "locks") }
+func (s store) archiveDir() string    { return filepath.Join(s.dir, "archive") }
 func (s store) file(id string) string { return filepath.Join(s.teamsDir(), safeName(id)+".json") }
 func (s store) exists(id string) bool {
 	st, err := os.Stat(s.file(id))

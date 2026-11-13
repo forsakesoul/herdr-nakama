@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// 编组变更（add / drop / swap）、[TEAM_UPDATE] 投递，以及任务目录的创建、列出与清理。
+// 编组变更（add / drop / swap / down）、[TEAM_UPDATE] 投递，以及任务目录的创建、列出与清理。
 // 不变量：Owner 不可变更；Worker 1..4、Advisor 0..4 在册；被替换/移除的实例只记入 retired，
 // 不关闭其 pane、不向其发送输入；实例号不复用。
 
@@ -217,7 +217,10 @@ func (a *app) changeRole(t *Team, cfg *config, kind, cliEngine, oldKey string) e
 	if err := a.save(t); err != nil {
 		return err
 	}
-	return a.resumeChange(t)
+	if err := a.resumeChange(t); err != nil {
+		return err
+	}
+	return a.autoInit(cfg, t)
 }
 
 // 上一次 add / swap 中断：先补齐它，本次参数不执行，补齐后由用户重跑。
@@ -293,6 +296,70 @@ func (a *app) cmdDrop(args []string) error {
 	a.outf(L("编组 %s 已变更（team_rev=%d）。\n"), t.TeamID, t.TeamRev)
 	if !a.deliverTeamUpdates(t) {
 		return errExit
+	}
+	return nil
+}
+
+// down：解散编组。只把状态文件移入 archive/，让锚点 pane 可以重新建组；不关闭或改名任何 pane，也不向成员发送输入。
+// 状态文件损坏时同样可用：损坏的文件仍会占住锚点，这里是唯一不用手删文件的出口。
+func (a *app) cmdDown(args []string) error {
+	v, help, err := a.parseArgs(args, L("用法：nakama down --team <id> [--yes]\n"), []string{"--team"}, []string{"--yes"})
+	if help || err != nil {
+		return err
+	}
+	id := first(v["--team"])
+	if id == "" {
+		return a.fail(L("down 必须指定 --team <id>"))
+	}
+	if !a.st.exists(id) {
+		return a.fail(L("编组不存在：%s"), id)
+	}
+	// 锁序 anchor → team；状态读不出来就拿不到锚点，只取 team 锁。
+	t, _ := a.st.load(id)
+	if t != nil {
+		if err := a.lock("anchor-"+t.Anchor.PaneID, "down"); err != nil {
+			return err
+		}
+	}
+	if err := a.lock("team-"+id, "down"); err != nil {
+		return err
+	}
+	if t, _ = a.st.load(id); t == nil {
+		a.warnf(L("编组 %s 的状态文件无法解析，按原样归档。"), id)
+	}
+	if _, yes := v["--yes"]; !yes {
+		if !stdinIsTTY() {
+			return a.fail(L("非交互环境需要 --yes 确认；未解散。"))
+		}
+		a.outf(L("将解散编组 %s：状态归档，不关闭 pane、不通知成员；之后不能再 init / send / rebind。确认？[y/N] "), id)
+		ans, err := a.readLine()
+		if l := strings.ToLower(ans); err != nil || (l != "y" && l != "yes") {
+			a.outf("%s", L("已取消。\n"))
+			return nil
+		}
+	}
+	dest := filepath.Join(a.st.archiveDir(), safeName(id)+".json")
+	if _, err := os.Lstat(dest); err == nil {
+		return a.fail(L("归档位置已存在：%s；请人工核对。"), dest)
+	}
+	if err := mkdirSecure(a.st.archiveDir()); err == nil {
+		err = os.Rename(a.st.file(id), dest)
+	}
+	if err != nil {
+		return a.fail(L("归档失败：%v"), err)
+	}
+	a.outf(L("编组 %s 已解散，状态归档到 %s。\n"), id, dest)
+	if t == nil {
+		return nil
+	}
+	for _, key := range t.members() {
+		a.outf(L("  %s（%s）的 pane %s 未关闭，请自行处理。\n"), key, t.role(key).Name, t.role(key).Pane)
+	}
+	if t.TaskDir != "" && t.TaskDir == taskDirFor(t) && realDir(t.TaskDir) {
+		// 非递归删除：只有空目录才会被删掉。
+		if os.Remove(t.TaskDir) != nil {
+			a.outf(L("任务目录保留：%s（不再需要时请自行删除）。\n"), t.TaskDir)
+		}
 	}
 	return nil
 }

@@ -87,6 +87,8 @@ Press `prefix+u` again in any pane of the team to open its management menu:
 | `r` / `x` | Remove a Worker / an Advisor |
 | `w` / `v` | Replace a Worker / an Advisor (to change its engine, or to swap out a member that is stuck) |
 | `c` | Clean up task records |
+| `b` | Rebind the team after a restart (shown only when needed) |
+| `d` | Disband the team: its state is archived and panes stay open |
 
 - After adding or replacing, wait for the new member to start, then press `prefix+i` once more: the new member is initialized and the others receive the updated member list.
 - New members only open in the current tab. A team keeps at least 1 Worker, has at most 4 Workers and 4 Advisors, and its Owner cannot be replaced.
@@ -104,9 +106,11 @@ nakama rebind --team <id> --confirm-anchor <new anchor terminal>
 
 Add the confirmation arguments the preflight asks for. You get the original team back, and each member keeps its conversation. For the refusal conditions and what to do after a partial failure, see the [reference](docs/reference.md).
 
+You can also press `prefix+u` in any pane of the team and choose `b`: it shows the same preflight and, once you confirm, rebinds with the values it observed.
+
 ## Task records
 
-Each team has a `.nakama/<team id>/` directory inside the project that holds handoffs, reports and review conclusions; it is kept out of Git by default. Nothing is deleted when a task finishes: the Owner cleans up only after you say so, or you can do it yourself with `c` in the management menu or `nakama clean`.
+Each team has a `.nakama/<team id>/` directory inside the project that holds handoffs, reports and review conclusions; it is kept out of Git by default. Nothing is deleted when a task finishes: the Owner cleans up only after you say so, or you can do it yourself with `c` in the management menu or `nakama clean`. Members exchange messages through `nakama send`, which numbers each message, stores its body here and records delivery in a ledger; `nakama status` lists requests still waiting for an answer and messages that were not delivered.
 
 ## Configuration
 
@@ -130,6 +134,7 @@ File: `config.json`. **Never commit real providers / paths / credentials.**
 
 - An engine is written as `<launcher>/<model>[:effort]`, or as a shorthand you define in `engine_map`.
 - `projects` gives a repository its team-name prefix and a project context file that every member receives at initialization.
+- `default_profile.auto_init: true` initializes the team right after it is created or a member is added or replaced. It is off by default so that you can check each pane's model and permissions first.
 - The language of the interface and prompts is set by `NAKAMA_LANG=en|zh|ja` and otherwise follows the system locale; set it in the environment that starts Herdr.
 - Launcher details (the `pi` provider, `ccenv`, the Claude model preset) are in the [reference](docs/reference.md).
 
@@ -144,6 +149,8 @@ nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
+nakama send --team <id> --task <task_id> --to <member key> --title <title> --file <body file> [...]
+nakama down --team <id> [--yes]
 ```
 
 ## Upgrading
