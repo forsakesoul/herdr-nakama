@@ -26,7 +26,7 @@ title = "Herdr team: status"
 contexts = ["global"]
 command = ["bin/nakama", "status"]
 
-# rebind requires --team and confirmation arguments (see README "Restoring teams after a computer or Herdr restart").
+# rebind requires --team and confirmation arguments (see docs/reference.md, "Restoring teams after a computer or Herdr restart").
 # Without arguments it only prints usage and exits non-zero, with no reads or writes; there is no --force equivalent.
 [[actions]]
 id = "rebind"
