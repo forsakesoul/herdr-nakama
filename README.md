@@ -90,7 +90,8 @@ Press `prefix+u` again in any pane of the team to open its management menu:
 
 - After adding or replacing, wait for the new member to start, then press `prefix+i` once more: the new member is initialized and the others receive the updated member list.
 - New members only open in the current tab. A team keeps at least 1 Worker, has at most 4 Workers and 4 Advisors, and its Owner cannot be replaced.
-- The pane of a removed or replaced member is left open for you to close.
+- The pane of a removed or replaced member is left open for you to close. Before replacing a Worker, make sure the old one has stopped writing, so two Workers never edit the same scope at once.
+- When a role has more than one member, removing or replacing first asks for the member key (for example `W2`).
 
 ## Restoring after a restart
 

@@ -105,7 +105,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 
 ## 中途增减与替换角色
 
-编组初始化之后，可以增减或替换 Worker / Advisor，包括卡住的成员。Owner 不可替换。一个编组包含 1 个 Owner、1–4 个 Worker 与 0–4 个 Advisor（默认 1 Worker + 1 Advisor）；人数上限针对同时在册的成员，不限制实例号。同类有多个成员时，`swap` 与 `drop` 须指定 `--instance N`。新 pane 一律在锚点所在的 tab 内 split；无法核验时停止操作，不新开 tab 或窗口。
+编组初始化之后，可以增减或替换 Worker / Advisor，包括卡住的成员。Owner 不可替换。一个编组包含 1 个 Owner、1–4 个 Worker 与 0–4 个 Advisor（默认 1 个 Worker；Advisor 引擎不为 `none` 时默认 1 个 Advisor，否则没有）；人数上限针对同时在册的成员，不限制实例号。同类有多个成员时，`swap` 与 `drop` 须指定 `--instance N`。新 pane 一律在锚点所在的 tab 内 split；无法核验时停止操作，不新开 tab 或窗口。
 
 - **入口**：在锚点或任一角色 pane 按 `prefix+u`，已有编组时显示管理菜单（`a` 添加 Advisor、`n` 添加 Worker、`x` 移除 Advisor、`r` 移除 Worker（不可移除最后一个）、`v` 替换 Advisor、`w` 替换 Worker、`c` 清理任务目录；同类有多个成员时菜单输入成员键如 `W2`，命令行 `--instance` 则用数字如 `2`），选引擎并确认后执行。命令行等价为 `nakama add / drop / swap --team <id>`。
 - **两步完成**：`add` / `swap` 只创建 pane 并启动新实例；核对新实例的模型与授权后按 `prefix+i`，`init` 初始化新角色，再向其余在册角色各投递一次 `[TEAM_UPDATE]`（最新映射加该角色的新分工规则）。`drop` 没有新实例，直接投递。
@@ -204,7 +204,7 @@ go build -trimpath -o bin/nakama ./cmd/nakama
 
 ## 已知限制
 
-- Herdr server 命名空间无法由 CLI 直接证明；锚点证据以 `pane get` 的 `terminal_id` 连续性（init/已有组时比对）代替，README 如实记录该边界。
+- Herdr server 命名空间无法由 CLI 直接证明；锚点证据以 `pane get` 的 `terminal_id` 连续性（init/已有组时比对）代替，本文档如实记录该边界。
 - `rebind` 的改名与 Bridge 自动命名之间存在无法消除的竞争窗口（见「电脑或 Herdr 重启后恢复编组」）；漂移时停止并保留计划。
 - `rebind` 的 Herdr 调用只经假 herdr harness 验证；真实 Herdr 0.9.3 上 `agent rename` 的返回与 `plugin action invoke` 传参方式未在本版本采样。
 - 手动启动器（pi/cc/ccenv）首次冻结要求「split 时记录的 terminal_id == 首次 agent get 的 terminal_id」+「kind 等于期望种类」+「实例未被他人具名」；任一不满足即 UNKNOWN 停止。唯一名称兼容项是外部 Bridge 的精确自动名（项目目录 slug + terminal_id 的 SHA-256 前 4 位）：完整启动指纹仍一致时允许替换为角色名；其他名字、缺少启动指纹或指纹漂移仍拒绝。时间戳用于区分创建批次，这项兼容用于避免自动命名阻断 init。
