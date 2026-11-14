@@ -117,6 +117,9 @@ func fetch(url string, limit int64) ([]byte, error) {
 	return b, err
 }
 
+// 单个包内文件的大小上限；超限即拒绝，不截断。
+var maxEntry int64 = 64 << 20
+
 // 解包到 dir：只接受 nakama/ 下的普通文件和目录，拒绝链接、绝对路径与 ..。
 func untar(pkg []byte, dir string) error {
 	gz, err := gzip.NewReader(bytes.NewReader(pkg))
@@ -145,10 +148,13 @@ func untar(pkg []byte, dir string) error {
 		case tar.TypeDir:
 			err = os.MkdirAll(dest, 0o755)
 		case tar.TypeReg:
+			if h.Size > maxEntry {
+				return fmt.Errorf("entry %q is too large", h.Name)
+			}
 			if err = os.MkdirAll(filepath.Dir(dest), 0o755); err == nil {
 				var f *os.File
 				if f, err = os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, h.FileInfo().Mode().Perm()); err == nil {
-					_, err = io.Copy(f, io.LimitReader(tr, 64<<20))
+					_, err = io.Copy(f, tr)
 					if cerr := f.Close(); err == nil {
 						err = cerr
 					}
@@ -201,17 +207,13 @@ func (a *app) cmdUpdate(args []string) error {
 	if r := a.herdr("plugin", "list", "--json", "--plugin", pluginID); r.ok() {
 		_ = json.Unmarshal(r.stdout, &list)
 	}
-	if ps := list.Result.Plugins; len(ps) == 1 && ps[0].Source.Kind != "" && ps[0].Source.Kind != "local" {
-		a.outf("%s", L("本插件由 Herdr 从 GitHub 安装，交给 herdr plugin update 升级。\n"))
-		if r := a.herdrPass("plugin", "update", pluginID, "--yes"); !r.ok() {
-			return a.fail(L("herdr plugin update 失败。"))
-		}
-		return nil
-	}
-	if _, err := os.Lstat(filepath.Join(a.root, ".git")); err == nil {
+	ps := list.Result.Plugins
+	viaHerdr := len(ps) == 1 && ps[0].Source.Kind != "" && ps[0].Source.Kind != "local"
+	if _, err := os.Lstat(filepath.Join(a.root, ".git")); err == nil && !viaHerdr {
 		return a.fail(L("插件目录 %s 是源码检出，update 不改动它：请在该目录 git pull 后重新构建（go build -trimpath -o bin/nakama ./cmd/nakama）。"), a.root)
 	}
 
+	// 两条升级路径共用同一次确认：只有调用者确认后，才替换文件或向 Herdr 传 --yes。
 	if !yes {
 		if !stdinIsTTY() {
 			return a.fail(L("非交互环境需要 --yes 确认；未升级。"))
@@ -222,6 +224,13 @@ func (a *app) cmdUpdate(args []string) error {
 			a.outf("%s", L("已取消。\n"))
 			return nil
 		}
+	}
+	if viaHerdr {
+		a.outf("%s", L("本插件由 Herdr 从 GitHub 安装，交给 herdr plugin update 升级。\n"))
+		if r := a.herdrPass("plugin", "update", pluginID, "--yes"); !r.ok() {
+			return a.fail(L("herdr plugin update 失败。若当前 Herdr 不支持该子命令，请升级 Herdr，或重新执行 herdr plugin install forsakesoul/herdr-nakama。"))
+		}
+		return nil
 	}
 	name := "nakama-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
 	dl := releaseBase() + "/releases/download/" + tag + "/"
@@ -258,16 +267,24 @@ func (a *app) cmdUpdate(args []string) error {
 		return a.fail(L("升级失败：%v"), "package is incomplete")
 	}
 	oldProto, _ := a.protocolSha()
-	// ponytail: 逐项替换，不是整体原子；中途失败会留下新旧混合的目录，重跑 update 即可补齐。
-	ents, _ := os.ReadDir(stage)
-	for _, e := range ents {
-		dest := filepath.Join(a.root, e.Name())
-		if err = os.RemoveAll(dest); err == nil {
-			err = os.Rename(filepath.Join(stage, e.Name()), dest)
+	// 逐文件换入，只动包内文件；清单最后换：版本号是“已升级”的标记，中途失败时它还是旧的，重跑会从头补齐。
+	// ponytail: 不是整体原子，也不删除新版本已去掉的旧文件；需要时改成整目录切换。
+	const manifest = "herdr-plugin.toml"
+	err = filepath.WalkDir(stage, func(p string, d os.DirEntry, err error) error {
+		rel, _ := filepath.Rel(stage, p)
+		switch {
+		case err != nil || rel == "." || rel == manifest:
+			return err
+		case d.IsDir():
+			return os.MkdirAll(filepath.Join(a.root, rel), 0o755)
 		}
-		if err != nil {
-			return a.fail(L("升级失败：%v"), err)
-		}
+		return os.Rename(p, filepath.Join(a.root, rel))
+	})
+	if err == nil {
+		err = os.Rename(filepath.Join(stage, manifest), filepath.Join(a.root, manifest))
+	}
+	if err != nil {
+		return a.fail(L("升级失败：%v"), err)
 	}
 	a.outf(L("已升级到 %s。运行 herdr server reload-config 让 Herdr 读取新的插件清单。\n"), tag)
 	if newProto, _ := a.protocolSha(); newProto != oldProto {

@@ -69,6 +69,8 @@ func pkgRoot(t *testing.T, e *tenv, version string) string {
 	os.WriteFile(filepath.Join(root, "bin", "nakama"), []byte("old"), 0o755)
 	os.WriteFile(filepath.Join(root, "prompts", "zh", "protocol.md"), []byte("old protocol\n"), 0o644)
 	os.WriteFile(filepath.Join(root, "keep.txt"), []byte("mine"), 0o644)
+	os.WriteFile(filepath.Join(root, "bin", "helper.sh"), []byte("mine"), 0o755)
+	os.WriteFile(filepath.Join(root, "prompts", "zh", "custom.md"), []byte("mine"), 0o644)
 	return root
 }
 
@@ -129,6 +131,7 @@ func TestUpdateReplacesReleasePackage(t *testing.T) {
 	eq(t, read("bin/nakama"), "new", "二进制已替换")
 	eq(t, read("prompts/zh/protocol.md"), "new protocol\n", "提示词已替换")
 	eq(t, read("keep.txt"), "mine", "包外文件保留")
+	eq(t, read("bin/helper.sh")+read("prompts/zh/custom.md"), "minemine", "包内目录下的包外文件也保留")
 	ents, _ := os.ReadDir(e.root)
 	for _, x := range ents {
 		if strings.HasPrefix(x.Name(), ".nakama-update-") {
@@ -180,10 +183,55 @@ func TestUpdateHandsGitHubInstallToHerdr(t *testing.T) {
 	releaseServer(t, "v0.0.9", goodPkg(t), "")
 	t.Setenv("FAKE_PLUGIN_SOURCE", "github")
 	ok, out := runAt(root, "", "update")
-	if !ok {
+	eq(t, ok, false, "未确认不委托")
+	has(t, out, "需要 --yes", "同一条确认规则")
+	eq(t, e.count("plugin", "update"), 0, "未调用 herdr plugin update")
+	t.Setenv("FAKE_PLUGIN_UPDATE_FAIL", "1")
+	_, out = runAt(root, "", "update", "--yes")
+	has(t, out, "升级 Herdr", "旧版 Herdr 不支持该子命令时给出出路")
+	t.Setenv("FAKE_PLUGIN_UPDATE_FAIL", "")
+	if ok, out = runAt(root, "", "update", "--yes"); !ok {
 		t.Fatalf("应成功：\n%s", out)
 	}
 	eq(t, strings.Join(e.argvOf("plugin", "update", pluginID), " "), "plugin update "+pluginID+" --yes", "交给 herdr plugin update")
 	b, _ := os.ReadFile(filepath.Join(root, "bin", "nakama"))
 	eq(t, string(b), "old", "自己不替换文件")
+}
+
+func TestUpdateRerunCompletesPartialFailure(t *testing.T) {
+	e := newEnv(t)
+	root := pkgRoot(t, e, "0.0.4")
+	releaseServer(t, "v0.0.9", goodPkg(t), "")
+	// 提示词位置被目录占住：换入失败。
+	proto := filepath.Join(root, "prompts", "zh", "protocol.md")
+	os.Remove(proto)
+	os.Mkdir(proto, 0o755)
+	os.WriteFile(filepath.Join(proto, "x"), nil, 0o644)
+	ok, out := runAt(root, "", "update", "--yes")
+	eq(t, ok, false, "中途失败")
+	has(t, out, "升级失败", "报告失败")
+	eq(t, (&app{root: root}).localVersion(), "0.0.4", "清单未提前换成新版本")
+	os.RemoveAll(proto)
+	if ok, out = runAt(root, "", "update", "--yes"); !ok {
+		t.Fatalf("修复后重跑应补齐：\n%s", out)
+	}
+	b, _ := os.ReadFile(proto)
+	eq(t, string(b), "new protocol\n", "提示词已补齐")
+	eq(t, (&app{root: root}).localVersion(), "0.0.9", "最后才换清单")
+}
+
+func TestUntarRejectsOversizedEntry(t *testing.T) {
+	old := maxEntry
+	maxEntry = 4
+	t.Cleanup(func() { maxEntry = old })
+	dir := t.TempDir()
+	if err := untar(makePkg(t, []tarEntry{{name: "nakama/a", body: "1234"}}), dir); err != nil {
+		t.Fatalf("恰好上限应通过：%v", err)
+	}
+	if err := untar(makePkg(t, []tarEntry{{name: "nakama/b", body: "12345"}}), dir); err == nil {
+		t.Fatal("超过上限应报错，不能截断")
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "b")); len(b) != 0 {
+		t.Fatalf("不应留下截断文件：%q", b)
+	}
 }
