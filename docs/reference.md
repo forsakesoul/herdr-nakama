@@ -98,6 +98,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <member key> --title <title> --file <body file> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <member key>]
 nakama send --team <id> --resend <req> [--to <member key>] [--from <member key>]
 nakama down --team <id> [--yes]
+nakama resolve --team <id> --delivered | --not-delivered
 ```
 
 - New team names: `<project short name ≤8>_<12hex>`, or `task_` when no project matches. The suffix mixes a nanosecond timestamp with 6 bytes of cryptographic randomness and takes the first 6 bytes of its SHA-256, keeping a fixed format that external tools can recognize. Role names are `<prefix>_design/_execute/_advisor`, full name ≤32; existing teams keep their names.
@@ -151,6 +152,14 @@ Roles deliver every business message with `nakama send` instead of a hand-writte
 - An empty task directory is removed; one that holds messages is kept and its path is printed.
 - It asks for confirmation, and a non-interactive run needs `--yes`. `--team` is required and is never inferred from the pane.
 - It also works when the state file no longer passes validation — the case that would otherwise keep the anchor occupied.
+
+## Settling an unconfirmed delivery
+
+When `init` or a `[TEAM_UPDATE]` ends with an unknown result (for example `agent_prompt_stalled`), the team stops and nothing is resent. Look at the pane, then tell the plugin what you saw: `nakama resolve --team <id> --delivered` records the role as initialized (after verifying its identity again) or the update as delivered; `--not-delivered` clears the mark so that the next `init` sends it again. `status` prints this hint whenever it applies.
+
+- It covers the `prompt`, `team_update` and `rename` steps only. An unknown `split` or launch involves pane and process ownership and is not guessed at: disband with `down` and create a new team.
+- `--not-delivered` is refused when a role recorded with an empty session now reports one: Codex creates its session on the first input, so that is evidence the prompt arrived.
+- A failed identity capture after launch needs no `resolve`: capture is read-only, so the next `up` / `init` simply tries it again, and `up` then launches the members that were not started yet.
 
 ## State and safety
 
@@ -238,7 +247,10 @@ The fixtures `tests/fixtures/agent_get.json` / `pane_get_shell.json` come from r
 - The Herdr server namespace cannot be proven directly from the CLI; anchor evidence uses `terminal_id` continuity from `pane get` (compared at init / for existing teams) instead, and this page documents that boundary.
 - There is an unavoidable race window between `rebind` renames and Bridge auto-naming (see "Restoring teams after a computer or Herdr restart"); on drift it stops and keeps the plan.
 - `rebind`'s Herdr calls are only verified with the fake herdr harness; the return of `agent rename` and the argument passing of `plugin action invoke` on real Herdr 0.9.3 were not sampled in this version.
-- `send`'s Herdr calls (`agent wait`, `agent prompt`, `agent read`) and the timing of `auto_init` right after launch are only verified with the fake herdr harness; neither was sampled on real Herdr in this version.
+- `send` and `down` were run end to end on real Herdr 0.9.5 with Claude Code, Codex, Pi and Qoder members: each engine received a handoff, did the work and reported back by running `send` itself; also covered were the bounded wait on a working recipient followed by `NOT_SENT`, `--resend`, synchronous requests answered with `--no-deliver`, and 30 concurrent sends. Not sampled on real Herdr: rebind from the menu and the timing of `auto_init` right after launch.
+- Everything the plugin knows about a member's state comes from Herdr's status detection. Qoder CLI 1.1.89 matches no rule in Herdr's detection manifest and is always reported `idle`, so a working Qoder still receives prompts, and `--reply sync` or `init` can end with `agent_prompt_stalled` although the prompt arrived (use `resolve`). Codex was once reported idle in the middle of a turn; `send` therefore requires two consecutive idle observations, which narrows that window but cannot close it.
+- Startup dialogs that Herdr reports as idle swallow input. `init` refuses when the pane shows a dialog footer of the form `enter … · esc …` (seen on Codex: folder trust, hook review, and one more); this is a text match against the screen, so other dialogs — Qoder's folder trust keeps no distinguishable footer — are not caught. A Codex instance that was still starting has also accepted an init prompt without answering it.
+- `send` checks the recipient's status and then prompts; two senders that both see the same recipient idle can both deliver, and the second prompt arrives while the recipient is already working. Herdr offers no compare-and-send, so receivers still rely on the protocol's rule of advancing each req only once.
 - The first freeze of manual launchers (pi/cc/ccenv) requires "terminal_id recorded at split == terminal_id from the first agent get" + "kind equals the expected kind" + "the instance is not named by someone else"; if any fails it stops with UNKNOWN. The only name compatibility is the exact external Bridge auto-name (project directory slug + first 4 hex of SHA-256 of terminal_id): it may be replaced by the role name while the full launch fingerprint still matches; other names, missing launch fingerprints or fingerprint drift are still refused. Timestamps distinguish creation batches; this compatibility keeps auto-naming from blocking init.
 - Rebuilding a half-built team only launches when the pane occupancy is `idle` (confirmed `agent_not_found`); `occupied` and `unknown` (get failed / incomplete object) both terminate non-zero before launch.
 - The response structure of `agent start` was not sampled and is not relied on for capture; native identity always uses a bounded `agent get`.

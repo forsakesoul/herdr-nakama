@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 )
 
@@ -145,6 +146,25 @@ func (a *app) observeAgent(target string) (agentObj, bool) {
 		}
 	}
 	return agentObj{}, false
+}
+
+// 手动启动器刚 pane run 时，Herdr 要等 CLI 起来才识别得到（Claude Code 冷启动可超过 6 秒）：给 5 倍窗口。
+func (a *app) observeLaunch(target string) (agentObj, bool) {
+	for i := 0; i < pollTries()*5 && !a.stop.Load(); i++ {
+		if o, ok := a.agentGet(target); ok {
+			return o, true
+		}
+		sleepFor(a.poll)
+	}
+	return agentObj{}, false
+}
+
+// ponytail: 按屏幕文字认 Codex 的启动对话框（Herdr 把它们报成 idle）；文案随 Codex 版本变，Herdr 能报 blocked 后删掉。
+// 真机见过的页脚：enter continue · esc quit / enter confirm · esc skip / enter review · esc close。
+var dialogFooter = regexp.MustCompile(`enter [a-z]+ · esc [a-z]+`)
+
+func (a *app) startupDialog(pane string) bool {
+	return dialogFooter.Match(a.herdr("pane", "read", pane, "--source", "visible").stdout)
 }
 
 func pollTries() int {

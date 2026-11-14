@@ -211,10 +211,19 @@ func (a *app) deliver(t *Team, sub string, m *message, sync bool) (string, strin
 		}
 		return obj.AgentStatus, msg
 	}
-	st, msg := check()
+	// 空闲要连续观测到两次才算数：Herdr 对一轮进行中的 agent 偶尔会短暂报出 idle/done。
+	settled := func() (string, string) {
+		st, msg := check()
+		if msg == "" && (st == "idle" || st == "done") {
+			sleepFor(a.poll)
+			st, msg = check()
+		}
+		return st, msg
+	}
+	st, msg := settled()
 	if msg == "" && st == "working" {
 		a.herdr("agent", "wait", r.Name, "--timeout", "60000")
-		st, msg = check()
+		st, msg = settled()
 	}
 	switch {
 	case msg != "":
@@ -325,6 +334,10 @@ func (a *app) cmdSend(args []string) error {
 		if s != "sync" && s != "async" {
 			return a.fail(L("--reply 只能是 sync 或 async。"))
 		}
+		// 回报不是请求：带 --status 的消息若再要求答复，会在状态视图里变成一条永远等不到答复的请求。
+		if fields["status"] != "" {
+			return a.fail(L("--status 与 --reply 不能同用：回报不要求对方再答复。"))
+		}
 		fields["reply"], fields["reply_to"] = s, from
 	}
 	if s := first(v["--responds-to"]); s != "" {
@@ -425,7 +438,8 @@ func (a *app) statusTasks(t *Team) {
 			if m.Delivery == "NOT_SENT" || m.Delivery == "UNKNOWN" {
 				lines = append(lines, fmt.Sprintf("    %-8s %s %s→%s %s", m.Delivery, req, m.From, m.To, m.Title))
 			}
-			if m.Fields["reply"] == "" {
+			// 确证没送出去的请求只列为未送达，不再同时算作等待答复。
+			if m.Fields["reply"] == "" || m.Delivery == "NOT_SENT" {
 				continue
 			}
 			state, event, cancel := "WAITING", "", ""

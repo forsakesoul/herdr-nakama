@@ -98,6 +98,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <成员键>]
 nakama send --team <id> --resend <req> [--to <成员键>] [--from <成员键>]
 nakama down --team <id> [--yes]
+nakama resolve --team <id> --delivered | --not-delivered
 ```
 
 - 新组命名：`<项目短名 ≤8>_<12hex>`，未匹配时使用 `task_`；后缀由纳秒时间戳与 6 字节密码学随机数混合，经 SHA-256 取前 6 字节生成，保持外部工具可识别的固定格式。角色名 `<prefix>_design/_execute/_advisor`，全名 ≤32；已有组继续沿用原名。
@@ -151,6 +152,14 @@ nakama down --team <id> [--yes]
 - 空的任务目录会被删除；有消息的任务目录保留，并输出其路径。
 - 执行前要求确认，非交互环境需要 `--yes`。`--team` 必填，不按 pane 推断。
 - 状态文件已无法通过校验时同样可用，否则这种情况会一直占住锚点。
+
+## 处理结果不明的投递
+
+`init` 或 `[TEAM_UPDATE]` 以不明结果结束时（例如 `agent_prompt_stalled`），编组停住，不会重发。先到 pane 里看一眼，再把看到的结果告诉插件：`nakama resolve --team <id> --delivered` 会在重新核验身份后把该角色记为已初始化（或把更新记为已送达）；`--not-delivered` 清除标记，下一次 `init` 重新发送。适用时 `status` 会给出这条提示。
+
+- 只处理 `prompt`、`team_update`、`rename` 三种步骤。`split` 或启动的不明结果涉及 pane 与进程归属，不做猜测：用 `down` 解散后重建。
+- 记录 session 为空的角色现在上报了 session 时，`--not-delivered` 会被拒绝：Codex 收到首条输入才创建 session，这就是 prompt 已送达的证据。
+- 启动后取证失败不需要 `resolve`：取证是只读的，下一次 `up` / `init` 会直接重试，`up` 随后启动尚未启动的成员。
 
 ## 状态与安全
 
@@ -238,7 +247,10 @@ go build -trimpath -o bin/nakama ./cmd/nakama
 - Herdr server 命名空间无法由 CLI 直接证明；锚点证据以 `pane get` 的 `terminal_id` 连续性（init/已有组时比对）代替，本文档如实记录该边界。
 - `rebind` 的改名与 Bridge 自动命名之间存在无法消除的竞争窗口（见「电脑或 Herdr 重启后恢复编组」）；漂移时停止并保留计划。
 - `rebind` 的 Herdr 调用只经假 herdr harness 验证；真实 Herdr 0.9.3 上 `agent rename` 的返回与 `plugin action invoke` 传参方式未在本版本采样。
-- `send` 对 Herdr 的调用（`agent wait`、`agent prompt`、`agent read`）以及 `auto_init` 紧接启动后的时序，本版本只用假 herdr 测试验证过，都没有在真实 Herdr 上取样。
+- `send` 与 `down` 已在真实 Herdr 0.9.5 上用 Claude Code、Codex、Pi、Qoder 成员端到端跑过：每种引擎都收到交接、完成任务并自己执行 `send` 回报；另外覆盖了收件人忙碌时的有界等待及随后的 `NOT_SENT`、`--resend`、用 `--no-deliver` 答复的同步请求，以及 30 个并发发送。未在真实 Herdr 上取样的有：菜单内重绑，以及 `auto_init` 紧接启动后的时序。
+- 插件对成员状态的全部了解都来自 Herdr 的状态识别。Qoder CLI 1.1.89 匹配不到 Herdr 识别清单里的任何规则，始终被报告为 `idle`：正在工作的 Qoder 照样会收到 prompt，`--reply sync` 或 `init` 可能在 prompt 已送达的情况下以 `agent_prompt_stalled` 结束（用 `resolve` 处理）。Codex 出现过一轮进行中被短暂报成空闲的情况，所以 `send` 要求连续两次观测到空闲才投递，这只能缩小窗口，不能消除。
+- 被 Herdr 报成空闲的启动对话框会吞掉输入。pane 屏幕上出现 `enter … · esc …` 形式的对话框页脚时 `init` 会拒绝（在 Codex 上见过目录信任、钩子审查等三种）；这是对屏幕文字的匹配，其他对话框抓不到，Qoder 的目录信任对话框就没有可区分的页脚。另外见过仍在启动的 Codex 接收了初始化 prompt 却没有回复。
+- `send` 先查收件人状态再投递；两个发件人同时看到同一收件人空闲时都会投递，第二条 prompt 到达时收件人已在 working。Herdr 没有“比较后发送”的语义，接收方仍依赖协议里“同一 req 只推进一次”的规则。
 - 手动启动器（pi/cc/ccenv）首次冻结要求「split 时记录的 terminal_id == 首次 agent get 的 terminal_id」+「kind 等于期望种类」+「实例未被他人具名」；任一不满足即 UNKNOWN 停止。唯一名称兼容项是外部 Bridge 的精确自动名（项目目录 slug + terminal_id 的 SHA-256 前 4 位）：完整启动指纹仍一致时允许替换为角色名；其他名字、缺少启动指纹或指纹漂移仍拒绝。时间戳用于区分创建批次，这项兼容用于避免自动命名阻断 init。
 - 半组补建只在 pane 占用状态为 `idle`（确证 `agent_not_found`）时启动；`occupied` 与 `unknown`（get 失败/对象不完整）都在启动前非零终止。
 - `agent start` 的返回体结构未采样，不依赖其取证；native 身份一律用有界 `agent get`。

@@ -207,28 +207,23 @@ func (a *app) captureIdentity(t *Team, rn string) bool {
 	var obj agentObj
 	var ok bool
 	if eng.needsRename() {
-		obj, ok = a.observeAgent(string(r.Pane))
-		if ok {
-			obj, ok = gate.settle(obj)
-		}
-		// cc/ccenv/pi 的 session 由 SessionStart hook 在进程被识别后才上报，而首次冻结严格比较 session；
-		// 有界等它出现，避免启动观测记成空 session、init 时被判指纹漂移。始终没有则按空记录。
-		// 授权等待不计入这个轮询窗口，由 gate 的同一预算约束。
-		for tries := 1; ok && obj.ident().Session == "" && tries < pollTries(); tries++ {
-			sleepFor(a.poll)
-			if o, got := a.agentGet(string(r.Pane)); got {
-				obj = o
-			}
-			obj, ok = gate.settle(obj)
-		}
-	} else {
+		obj, ok = a.observeLaunch(string(r.Pane))
+	} else if obj, ok = a.observeAgent(r.Name); !ok {
 		// native 身份一律用有界 agent get（结构见 tests/fixtures/agent_get.json）。
-		if obj, ok = a.observeAgent(r.Name); !ok {
-			obj, ok = a.observeAgent(string(r.Pane))
+		obj, ok = a.observeAgent(string(r.Pane))
+	}
+	if ok {
+		obj, ok = gate.settle(obj)
+	}
+	// cc/ccenv/pi 的 session 由 SessionStart hook 在进程被识别后才上报，qoder 也在启动几秒后才上报，
+	// 而首次冻结严格比较 session：有界等它出现，避免记成空 session、init 时被判指纹漂移。始终没有则按空记录。
+	// codex 要到首次 prompt 才有 session，不等。授权等待不计入这个轮询窗口，由 gate 的同一预算约束。
+	for tries := 1; eng.launcher != "codex" && ok && obj.ident().Session == "" && tries < pollTries(); tries++ {
+		sleepFor(a.poll)
+		if o, got := a.agentGet(string(r.Pane)); got {
+			obj = o
 		}
-		if ok {
-			obj, ok = gate.settle(obj)
-		}
+		obj, ok = gate.settle(obj)
 	}
 	if !ok || !obj.ident().complete() {
 		a.errf(L("角色 %s 启动后无法取得完整身份（terminal|pane|kind|session）；不冻结，停止。"), rn)

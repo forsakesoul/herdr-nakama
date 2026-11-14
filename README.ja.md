@@ -151,6 +151,7 @@ nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <メンバーキー> --title <タイトル> --file <本文ファイル> [...]
 nakama down --team <id> [--yes]
+nakama resolve --team <id> --delivered | --not-delivered
 ```
 
 ## アップグレード

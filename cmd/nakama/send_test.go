@@ -111,6 +111,7 @@ func TestSendGuards(t *testing.T) {
 	has(t, e.mustFail(with("--from", "O1", "--to", "A1")...), "没有在册成员 A1", "未知收件人")
 	has(t, e.mustFail(with("--from", "O1", "--to", "W1", "--set", "status=DONE")...), "--set 须为", "专用字段不经 --set")
 	has(t, e.mustFail(with("--from", "O1", "--to", "W1", "--status", "OK")...), "--status 只能是", "状态取值受限")
+	has(t, e.mustFail(with("--from", "W1", "--to", "O1", "--status", "DONE", "--reply", "async")...), "不能同用", "回报不能同时要求答复")
 	has(t, e.mustFail("send", "--team", id, "--from", "O1", "--task", "../x", "--to", "W1", "--title", "t", "--file", body), "task_id 只能用", "task_id 不能逃出任务目录")
 	has(t, e.mustFail("send", "--team", id, "--from", "O1", "--task", "op_x", "--to", "W1", "--title", "t", "--file", filepath.Join(e.root, "none.md")), "正文文件不是普通可读文件", "正文须存在")
 	has(t, e.mustFail("send", "--team", id, "--from", "O1", "--resend", "op_x/O1-009"), "任务目录不存在", "未知任务不重投")
@@ -237,4 +238,93 @@ func TestAutoInitChainsAfterUpAndAdd(t *testing.T) {
 	eq(t, e.str("phase"), "initialized", "加人后接着初始化")
 	eq(t, e.str("roles", "A1", "inited"), "true", "新成员已初始化")
 	has(t, e.lastPrompt(id+"_design"), "[TEAM_UPDATE] team_rev=2", "其余成员收到更新")
+}
+
+func TestSendBoundaries(t *testing.T) {
+	e, id, body := sendSetup(t, true)
+	owner, worker := id+"_design", id+"_execute"
+	send := func(args ...string) []string { return append([]string{"send", "--team", id}, args...) }
+
+	// RESULT_REPLAY：只落盘的同步答复之后可以沿用原请求号补投。
+	e.mustRun(send("--from", "W1", "--task", "op_x", "--to", "O1", "--title", "答复：身份", "--file", body, "--status", "DONE", "--no-deliver")...)
+	has(t, e.mustRun(send("--from", "W1", "--resend", "op_x/W1-000")...), "req=op_x/W1-000 delivery=SENT to=O1", "同步答复可补投")
+	has(t, e.lastPrompt(owner), "req=op_x/W1-000 from=W1 to=O1 status=DONE", "补投内容不变")
+
+	// 台账里混入坏行：跳过，不影响后续读写。
+	sub := filepath.Join(realPath(e.proj), ".nakama", id, "op_x")
+	f, _ := os.OpenFile(filepath.Join(sub, ledgerName), os.O_APPEND|os.O_WRONLY, 0o600)
+	f.WriteString("not json\n{\"req\":\"\"}\n")
+	f.Close()
+	has(t, e.mustRun("status", "--team", id), "task op_x: messages=1 open=0", "坏行被忽略")
+
+	// 收件人在投递前被移除：原收件人不再接收，须显式改投。
+	t.Setenv("FAKE_WORKING_SUFFIX", "_advisor")
+	has(t, e.mustFail(send("--from", "O1", "--task", "op_x", "--to", "A1", "--title", "审查：diff", "--file", body, "--reply", "async")...), "delivery=NOT_SENT", "advisor 忙碌")
+	st := e.mustRun("status", "--team", id)
+	has(t, st, "NOT_SENT op_x/O1-000 O1→A1", "列为未送达")
+	hasNot(t, st, "WAITING", "没送出去的请求不算等待答复")
+	t.Setenv("FAKE_WORKING_SUFFIX", "")
+	e.mustRun("drop", "--team", id)
+	has(t, e.mustFail(send("--from", "O1", "--resend", "op_x/O1-000")...), "没有在册成员 A1", "不向已停用实例补投")
+	has(t, e.mustRun(send("--from", "O1", "--resend", "op_x/O1-000", "--to", "W1")...), "req=op_x/O1-000 delivery=SENT to=W1", "改投在册成员")
+	hasNot(t, e.lastPrompt(worker), "relayed_by", "作者自己改投不是代收")
+
+	// 新成员初始化前既不能发也收不到。
+	e.mustRun("add", "--team", id, "--role", "worker", "--engine", "cc")
+	has(t, e.mustFail(send("--from", "W2", "--task", "op_x", "--to", "O1", "--title", "t", "--file", body)...), "发件人 W2 尚未初始化", "未初始化不能发")
+	has(t, e.mustFail(send("--from", "O1", "--task", "op_x", "--to", "W2", "--title", "t", "--file", body)...), "W2 未完成初始化", "未初始化收不到")
+	eq(t, len(e.prompts(id+"_execute2")), 0, "未初始化成员没有收到输入")
+
+	// 任务目录被换成符号链接：拒绝写入。
+	dir := filepath.Join(realPath(e.proj), ".nakama", id)
+	os.Rename(dir, dir+".real")
+	os.Symlink(dir+".real", dir)
+	has(t, e.mustFail(send("--from", "O1", "--task", "op_x", "--to", "W1", "--title", "t", "--file", body)...), "没有可用的任务目录", "不跟随符号链接")
+}
+
+func TestStatusViewFollowsLedger(t *testing.T) {
+	e, id, body := sendSetup(t, false)
+	send := func(from, to, title string, extra ...string) {
+		t.Helper()
+		e.mustRun(append([]string{"send", "--team", id, "--from", from, "--task", "op", "--to", to, "--title", title, "--file", body}, extra...)...)
+	}
+	open := func() string {
+		out := e.mustRun("status", "--team", id)
+		return out[strings.Index(out, "  task op:"):]
+	}
+
+	send("O1", "W1", "派单：a", "--reply", "async") // O1-000
+	send("W1", "O1", "停点：a", "--status", "CONTEXT_READY", "--responds-to", "op/O1-000")
+	has(t, open(), "PAUSED   op/O1-000", "停点 → PAUSED")
+	send("O1", "W1", "恢复：a", "--set", "resumes=op/W1-000")
+	has(t, open(), "WAITING  op/O1-000", "恢复 → WAITING")
+	send("W1", "O1", "阻塞：a", "--status", "BLOCKED", "--responds-to", "op/O1-000")
+	has(t, open(), "BLOCKED  op/O1-000", "阻塞 → BLOCKED")
+
+	send("O1", "W1", "派单：a 新版", "--reply", "async", "--set", "replaces=op/O1-000") // O1-002
+	out := open()
+	hasNot(t, out, "op/O1-000", "被替代的请求不再列出")
+	has(t, out, "WAITING  op/O1-002", "新请求等待中")
+
+	send("O1", "W1", "取消：a", "--reply", "sync", "--set", "cancels=op/O1-002") // O1-003
+	has(t, open(), "WAITING  op/O1-002", "取消未确认前仍未结")
+	send("W1", "O1", "取消确认：a", "--status", "DONE", "--responds-to", "op/O1-003", "--no-deliver")
+	has(t, open(), "open=0", "取消确认后两条都结清")
+
+	send("O1", "W1", "派单：b", "--reply", "async") // O1-004
+	send("W1", "O1", "完成：b", "--status", "DONE", "--responds-to", "op/O1-004")
+	send("W1", "O1", "晚到：b", "--status", "BLOCKED", "--responds-to", "op/O1-004")
+	has(t, open(), "open=0", "晚到的阻塞不重开已答复的请求")
+}
+
+// 真机上见过 Codex 在一轮进行中被短暂报成空闲：单次空闲观测不足以投递。
+func TestSendRequiresStableIdle(t *testing.T) {
+	e, id, body := sendSetup(t, false)
+	worker := id + "_execute"
+	before := len(e.prompts(worker))
+	t.Setenv("NAKAMA_FAKE_STATUS_SEQ", "idle,working")
+	out := e.mustFail("send", "--team", id, "--from", "O1", "--task", "op_x", "--to", "W1", "--title", "派单：x", "--file", body)
+	has(t, out, "delivery=NOT_SENT", "空闲一闪而过不投递")
+	eq(t, len(e.prompts(worker)), before, "未发送输入")
+	eq(t, e.count("agent", "wait"), 1, "转入有界等待")
 }

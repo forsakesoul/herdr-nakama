@@ -300,6 +300,77 @@ func (a *app) cmdDrop(args []string) error {
 	return nil
 }
 
+// resolve：用户人工核对后，告知一次结果不明的投递是否已送达。只处理“重发一次也安全、或可由 init 重做”的步骤；
+// split / run 的不明结果涉及 pane 与进程归属，不在这里猜，用 down 解散重建。
+var resolvable = map[string]bool{"prompt": true, "team_update": true, "rename": true}
+
+func (a *app) cmdResolve(args []string) error {
+	v, help, err := a.parseArgs(args, L("用法：nakama resolve --team <id> --delivered | --not-delivered\n"), []string{"--team"}, []string{"--delivered", "--not-delivered"})
+	if help || err != nil {
+		return err
+	}
+	id := first(v["--team"])
+	_, yes := v["--delivered"]
+	_, no := v["--not-delivered"]
+	if id == "" || yes == no {
+		return a.fail(L("resolve 必须指定 --team <id>，并在 --delivered 与 --not-delivered 中选一个。"))
+	}
+	if !a.st.exists(id) {
+		return a.fail(L("编组不存在：%s"), id)
+	}
+	if err := a.lock("team-"+id, "resolve"); err != nil {
+		return err
+	}
+	t, err := a.st.load(id)
+	if err != nil {
+		return a.fail("%v", err)
+	}
+	p := t.Pending
+	if p == nil {
+		a.outf(L("编组 %s 没有待确认的副作用。\n"), id)
+		return nil
+	}
+	r := t.role(p.Role)
+	if !resolvable[p.Step] || r == nil {
+		return a.fail(L("step=%s 的未确认副作用不能用 resolve 处理：人工核对后用 down 解散并重建。"), p.Step)
+	}
+	if yes && p.Step == "prompt" {
+		// 记为已初始化前，冻结身份必须仍与观测一致。
+		if r.Identity == nil {
+			return a.fail(L("角色 %s 缺少冻结身份，不能记为已初始化。"), p.Role)
+		}
+		obj, msg := a.verifyIdentity(t, p.Role, r.Identity, false)
+		if filled, ok := fillSession(*r.Identity, obj.ident()); msg != "" && ok {
+			r.Identity, msg = &filled, ""
+		}
+		if msg != "" {
+			return a.fail("%s", msg)
+		}
+		r.Inited = true
+	}
+	// Codex 收到首条输入后才有 session：记录为空而现在观测到了，就是已送达的证据，不接受“未送达”。
+	if no && p.Step == "prompt" && r.Identity != nil {
+		if o, ok := a.agentGet(string(r.Pane)); ok {
+			if _, arrived := fillSession(*r.Identity, o.ident()); arrived {
+				return a.fail(L("%s 的 session 在这次投递后才出现，说明输入已送达；请核对其回复后用 --delivered。"), p.Role)
+			}
+		}
+	}
+	if yes && p.Step == "team_update" {
+		r.TeamUpdate = false
+	}
+	how := "--not-delivered"
+	if yes {
+		how = "--delivered"
+	}
+	t.Pending = nil
+	if err := a.save(t); err != nil {
+		return err
+	}
+	a.outf(L("已按人工核对结果处理 %s 的 %s（%s）；重跑 init 继续。\n"), p.Role, p.Step, how)
+	return nil
+}
+
 // down：解散编组。只把状态文件移入 archive/，让锚点 pane 可以重新建组；不关闭或改名任何 pane，也不向成员发送输入。
 // 状态文件损坏时同样可用：损坏的文件仍会占住锚点，这里是唯一不用手删文件的出口。
 func (a *app) cmdDown(args []string) error {
