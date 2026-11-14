@@ -893,7 +893,12 @@ func (a *app) initRole(t *Team, rn string) int {
 		return 2
 	}
 
-	if a.startupDialog(string(r.Pane)) {
+	dialog, readOK := a.startupDialog(string(r.Pane))
+	if !readOK {
+		a.errf(L("无法读取 %s 的 pane %s 屏幕，不能确认没有启动对话框；停止，未发送输入。"), rn, string(r.Pane))
+		return 2
+	}
+	if dialog {
 		a.errf(L("%s 的 pane %s 停在启动对话框（输入会被对话框吞掉）；先到该 pane 处理，再重跑 init。"), rn, string(r.Pane))
 		return 2
 	}

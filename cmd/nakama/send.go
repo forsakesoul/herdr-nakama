@@ -134,13 +134,15 @@ func (a *app) memberRef(t *Team, s string) (string, error) {
 
 // 发件人：当前 pane 对应的成员；拿不到 pane 时才用 --from，两者都有则必须一致。
 func (a *app) senderKey(t *Team, cliFrom string) (string, error) {
-	byPane := ""
-	if pane := os.Getenv("HERDR_PANE_ID"); pane != "" {
-		for _, k := range t.members() {
-			if string(t.role(k).Pane) == pane {
-				byPane = k
-			}
+	byPane, pane := "", os.Getenv("HERDR_PANE_ID")
+	for _, k := range t.members() {
+		if pane != "" && string(t.role(k).Pane) == pane {
+			byPane = k
 		}
+	}
+	// 有 pane 却不是在册成员（如已停用的实例）：不能靠 --from 借用其他成员的名义。
+	if pane != "" && byPane == "" {
+		return "", a.fail(L("当前 pane %s 不是编组 %s 的在册成员，不能发送。"), pane, t.TeamID)
 	}
 	if cliFrom == "" {
 		if byPane == "" {
@@ -202,11 +204,13 @@ func (a *app) deliver(t *Team, sub string, m *message, sync bool) (string, strin
 	if !r.Inited || r.Stale || r.Identity == nil {
 		return "NOT_SENT", fmt.Sprintf(L("%s 未完成初始化或身份待核对"), m.To)
 	}
+	// 本次发送的身份基准：空 session 首次补全后固定下来，之后的观测都与它比较。
+	base := *r.Identity
 	check := func() (string, string) {
-		obj, msg := a.verifyIdentity(t, m.To, r.Identity, false)
+		obj, msg := a.verifyIdentity(t, m.To, &base, false)
 		if msg != "" {
-			if _, ok := fillSession(*r.Identity, obj.ident()); ok {
-				msg = ""
+			if filled, ok := fillSession(base, obj.ident()); ok {
+				base, msg = filled, ""
 			}
 		}
 		return obj.AgentStatus, msg
@@ -232,6 +236,10 @@ func (a *app) deliver(t *Team, sub string, m *message, sync bool) (string, strin
 		return "NOT_SENT", fmt.Sprintf(L("%s 当前状态为 %s"), r.Name, st)
 	case a.interrupted():
 		return "NOT_SENT", "interrupted"
+	}
+	// 等待期间成员可能被移除或替换（send 不取锁）：投递前重读在册状态。只缩小窗口，重读与投递之间仍可能变更。
+	if cur, err := a.st.load(t.TeamID); err != nil || cur.role(m.To) == nil || cur.role(m.To).Name != r.Name || cur.role(m.To).Pane != r.Pane {
+		return "NOT_SENT", fmt.Sprintf(L("编组 %s 没有在册成员 %s（已停用的实例不再收发消息）。"), t.TeamID, m.To)
 	}
 	m.Delivery, m.Note = "UNKNOWN", "in-flight"
 	if a.appendLedger(sub, *m) != nil {
@@ -297,8 +305,15 @@ func (a *app) cmdSend(args []string) error {
 	if err != nil {
 		return err
 	}
-	if !t.role(from).Inited {
+	// 发件人也按冻结身份核验：pane 被别的实例占用后，不能再以原成员名义写台账、发消息。
+	sr := t.role(from)
+	if !sr.Inited || sr.Stale || sr.Identity == nil {
 		return a.fail(L("发件人 %s 尚未初始化。"), from)
+	}
+	if obj, msg := a.verifyIdentity(t, from, sr.Identity, false); msg != "" {
+		if _, ok := fillSession(*sr.Identity, obj.ident()); !ok {
+			return a.fail("%s", msg)
+		}
 	}
 	if req := first(v["--resend"]); req != "" {
 		for k := range v {
@@ -415,7 +430,7 @@ func (a *app) resend(t *Team, from, req, cliTo string) error {
 	if from != m.From {
 		m.Via = from
 	}
-	return a.finishSend(t, sub, m, false)
+	return a.finishSend(t, sub, m, m.Via == "" && m.Fields["reply"] == "sync")
 }
 
 // status 的任务视图：按台账推导未答复请求与未送达消息。只读，是给人和压缩后的角色看的线索；
@@ -445,6 +460,9 @@ func (a *app) statusTasks(t *Team) {
 			state, event, cancel := "WAITING", "", ""
 			for _, other := range order {
 				x := last[other].Fields
+				if d := last[other].Delivery; d == "NOT_SENT" || d == "UNKNOWN" {
+					continue
+				}
 				switch {
 				case state == "REPLIED" || state == "SUPERSEDED" || state == "CANCELLED":
 				case x["replaces"] == req:

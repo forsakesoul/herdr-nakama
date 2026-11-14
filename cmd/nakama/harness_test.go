@@ -253,7 +253,7 @@ func fakeHerdr(args []string) {
 		if r.sess != "" {
 			sess = `{"value":"` + r.sess + `"}`
 		}
-		if n, _ := strconv.Atoi(os.Getenv("NAKAMA_FAKE_SESSION_AFTER")); n > 0 && sess == "null" && counter(log+".sessget") > n {
+		if n, _ := strconv.Atoi(os.Getenv("NAKAMA_FAKE_SESSION_AFTER")); n > 0 && sess == "null" && counter(log+".sessget."+r.pane) > n {
 			sess = `{"value":"sess-late"}`
 		}
 		status := env("FAKE_STATUS", "idle")
@@ -291,6 +291,9 @@ func fakeHerdr(args []string) {
 		}
 		fmt.Println(`{"result":{"ok":true}}`)
 	case "pane read":
+		if os.Getenv("FAKE_PANE_READ_FAIL") != "" {
+			errOut("server_unavailable")
+		}
 		fmt.Println(os.Getenv("FAKE_PANE_TEXT"))
 	case "agent read":
 		fmt.Println("recent output")

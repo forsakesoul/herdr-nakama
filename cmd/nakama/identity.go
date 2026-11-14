@@ -230,6 +230,11 @@ func (a *app) captureIdentity(t *Team, rn string) bool {
 		return false
 	}
 	id := obj.ident()
+	// 重试取证（上次已保存、pending 未清）时不覆盖基准：观测变了就是换了实例。
+	if r.LaunchIdentity != nil && !sameIdent(id, *r.LaunchIdentity) {
+		a.errf(L("角色 %s 实例指纹与启动观测不一致（session/terminal 变化）；拒绝，停止（UNKNOWN）。"), rn)
+		return false
+	}
 	r.LaunchIdentity = &id
 	if !eng.needsRename() {
 		frozen := id

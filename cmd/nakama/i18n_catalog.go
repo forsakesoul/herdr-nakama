@@ -359,4 +359,6 @@ var catalog = map[string][2]string{
 	"  人工核对后用 nakama resolve --team %s --delivered 或 --not-delivered 处理。\n": {"  after checking, settle it with nakama resolve --team %s --delivered or --not-delivered.\n", "  確認後、nakama resolve --team %s --delivered または --not-delivered で処理してください。\n"},
 	"%s 的 pane %s 停在启动对话框（输入会被对话框吞掉）；先到该 pane 处理，再重跑 init。":                 {"%s: pane %s is stopped at a startup dialog (the dialog would swallow the input); deal with it in that pane, then run init again.", "%s の pane %s は起動時のダイアログで止まっています（入力はダイアログに飲み込まれます）。その pane で処理してから init を再実行してください。"},
 	"%s 的 session 在这次投递后才出现，说明输入已送达；请核对其回复后用 --delivered。":                  {"%s reported its session only after this delivery, so the input did arrive; check its reply and use --delivered.", "%s の session はこの配信の後に現れたので、入力は届いています。返信を確認したうえで --delivered を使ってください。"},
+	"无法读取 %s 的 pane %s 屏幕，不能确认没有启动对话框；停止，未发送输入。":                            {"cannot read the screen of %s's pane %s, so the absence of a startup dialog cannot be confirmed; stopping, no input sent.", "%s の pane %s の画面を読み込めず、起動時のダイアログがないことを確認できません。停止します。入力は送信していません。"},
+	"当前 pane %s 不是编组 %s 的在册成员，不能发送。":                                        {"the current pane %s is not a member on the roster of team %s; cannot send.", "現在の pane %s はチーム %s の在籍メンバーではないため、送信できません。"},
 }

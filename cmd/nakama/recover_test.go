@@ -85,5 +85,22 @@ func TestInitRefusesStartupDialog(t *testing.T) {
 	eq(t, e.count("agent", "prompt"), 0, "未发送输入")
 	eq(t, e.str("pending"), "<nil>", "不留 pending")
 	t.Setenv("FAKE_PANE_TEXT", "")
+	t.Setenv("FAKE_PANE_READ_FAIL", "1")
+	has(t, e.mustFail("init", "--team", e.teamID()), "无法读取", "屏幕读不到也拒绝")
+	eq(t, e.count("agent", "prompt"), 0, "未发送输入")
+	t.Setenv("FAKE_PANE_READ_FAIL", "")
 	has(t, e.mustRun("init", "--team", e.teamID()), "READY", "对话框处理后可初始化")
+}
+
+// 取证已保存但 pending 未清时中断，之后 pane 换了实例：重试不得覆盖基准。
+func TestIdentityRetryKeepsSavedBaseline(t *testing.T) {
+	e := newEnv(t)
+	e.config("codex")
+	e.mustRun("up")
+	e.stateSet(func(m map[string]any) {
+		m["pending"] = map[string]any{"op_id": "1", "role": "W1", "step": "identity", "delivery": "NOT_SENT"}
+	})
+	e.rowSet(e.str("roles", "W1", "name"), e.str("roles", "W1", "pane"), e.str("roles", "W1", "launch_identity", "terminal_id"), "codex", "other-session")
+	has(t, e.mustFail("init", "--team", e.teamID()), "与启动观测不一致", "拒绝")
+	eq(t, e.str("roles", "W1", "launch_identity", "session"), "", "基准未被覆盖")
 }

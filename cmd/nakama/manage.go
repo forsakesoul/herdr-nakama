@@ -413,10 +413,10 @@ func (a *app) cmdDown(args []string) error {
 	if _, err := os.Lstat(dest); err == nil {
 		return a.fail(L("归档位置已存在：%s；请人工核对。"), dest)
 	}
-	if err := mkdirSecure(a.st.archiveDir()); err == nil {
-		err = os.Rename(a.st.file(id), dest)
+	if err := mkdirSecure(a.st.archiveDir()); err != nil {
+		return a.fail(L("归档失败：%v"), err)
 	}
-	if err != nil {
+	if err := os.Rename(a.st.file(id), dest); err != nil {
 		return a.fail(L("归档失败：%v"), err)
 	}
 	a.outf(L("编组 %s 已解散，状态归档到 %s。\n"), id, dest)

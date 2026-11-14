@@ -163,8 +163,10 @@ func (a *app) observeLaunch(target string) (agentObj, bool) {
 // 真机见过的页脚：enter continue · esc quit / enter confirm · esc skip / enter review · esc close。
 var dialogFooter = regexp.MustCompile(`enter [a-z]+ · esc [a-z]+`)
 
-func (a *app) startupDialog(pane string) bool {
-	return dialogFooter.Match(a.herdr("pane", "read", pane, "--source", "visible").stdout)
+// ok=false：屏幕读不到，不能当作“没有对话框”。
+func (a *app) startupDialog(pane string) (dialog, ok bool) {
+	r := a.herdr("pane", "read", pane, "--source", "visible")
+	return dialogFooter.Match(r.stdout), r.ok()
 }
 
 func pollTries() int {

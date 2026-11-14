@@ -328,3 +328,66 @@ func TestSendRequiresStableIdle(t *testing.T) {
 	eq(t, len(e.prompts(worker)), before, "未发送输入")
 	eq(t, e.count("agent", "wait"), 1, "转入有界等待")
 }
+
+func TestDownReportsArchiveFailure(t *testing.T) {
+	e, id, _ := sendSetup(t, false)
+	// archive 位置被普通文件占住：建目录失败。
+	os.WriteFile(filepath.Join(os.Getenv("HERDR_PLUGIN_STATE_DIR"), "archive"), nil, 0o600)
+	has(t, e.mustFail("down", "--team", id, "--yes"), "归档失败", "不得报告成功")
+	eq(t, e.teamID(), id, "编组仍在")
+}
+
+func TestSendVerifiesSenderAndRoster(t *testing.T) {
+	e, id, body := sendSetup(t, false)
+	args := []string{"send", "--team", id, "--task", "op", "--to", "W1", "--title", "t", "--file", body}
+	n := e.count("agent", "prompt")
+
+	t.Setenv("HERDR_PANE_ID", "w0:p99") // 有 pane 但不是成员：--from 不能借名
+	has(t, e.mustFail(append(args, "--from", "O1")...), "不是编组", "拒绝")
+	t.Setenv("HERDR_PANE_ID", "")
+
+	// 发件人的 pane 换了实例。
+	e.rowSet(id+"_design", e.str("roles", "O1", "pane"), "term_other", "codex", "")
+	has(t, e.mustFail(append(args, "--from", "O1")...), "实例身份漂移", "发件人身份漂移时拒绝")
+	eq(t, e.count("agent", "prompt"), n, "均未投递")
+	if _, err := os.Stat(filepath.Join(realPath(e.proj), ".nakama", id, "op")); err == nil {
+		t.Fatal("未通过发件人核验不应写入任务目录")
+	}
+}
+
+func TestUndeliveredControlMessagesDoNotSettle(t *testing.T) {
+	e, id, body := sendSetup(t, false)
+	send := func(ok bool, from, to, title string, extra ...string) {
+		t.Helper()
+		a := append([]string{"send", "--team", id, "--from", from, "--task", "op", "--to", to, "--title", title, "--file", body}, extra...)
+		if ok {
+			e.mustRun(a...)
+		} else {
+			e.mustFail(a...)
+		}
+	}
+	view := func() string {
+		out := e.mustRun("status", "--team", id)
+		return out[strings.Index(out, "  task op:"):]
+	}
+	send(true, "O1", "W1", "派单：a", "--reply", "async")
+	send(true, "W1", "O1", "停点：a", "--status", "CONTEXT_READY", "--responds-to", "op/O1-000")
+
+	t.Setenv("FAKE_WORKING_SUFFIX", "_execute")
+	send(false, "O1", "W1", "恢复：a", "--set", "resumes=op/W1-000")
+	has(t, view(), "PAUSED   op/O1-000", "未送达的恢复不生效")
+	send(false, "O1", "W1", "新版：a", "--reply", "async", "--set", "replaces=op/O1-000")
+	has(t, view(), "PAUSED   op/O1-000", "未送达的替代不结清原请求")
+	t.Setenv("FAKE_WORKING_SUFFIX", "_design")
+	send(false, "W1", "O1", "完成：a", "--status", "DONE", "--responds-to", "op/O1-000")
+	has(t, view(), "PAUSED   op/O1-000", "未送达的回报不结清原请求")
+	t.Setenv("FAKE_WORKING_SUFFIX", "")
+
+	// 同步请求首次未送达，作者重投时仍等待答复。
+	t.Setenv("FAKE_WORKING_SUFFIX", "_execute")
+	send(false, "O1", "W1", "确认：b", "--reply", "sync")
+	t.Setenv("FAKE_WORKING_SUFFIX", "")
+	e.mustRun("send", "--team", id, "--from", "O1", "--resend", "op/O1-003")
+	argv := e.argvs()[len(e.argvs())-2]
+	eq(t, strings.Join(argv[len(argv)-3:], " "), "--wait --timeout 120000", "重投保留同步等待")
+}
