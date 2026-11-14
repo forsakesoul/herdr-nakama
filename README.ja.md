@@ -152,9 +152,13 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <メンバーキー> --title <タイトル> --file <本文ファイル> [...]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
+nakama version [--check]
+nakama update [--check] [--yes]
 ```
 
 ## アップグレード
+
+現在のバージョンと最新リリースは `herdr plugin action invoke version --plugin forsakesoul.nakama` で確認でき、`update` アクション（またはプラグインディレクトリで `bin/nakama update`）でアップグレードします。方法はインストール方法によって変わります。GitHub からインストールした場合は `herdr plugin update` に任せます。link したリリースパッケージは、新しいパッケージをダウンロードし、`SHA256SUMS` で検証してからその場で置き換えます。ソースのチェックアウトは変更せず、`git pull` して再ビルドするよう案内します。アップグレード後は `herdr server reload-config` を実行してください。
 
 アップグレード前に作成したチームは、会話としてはそのまま使えます。新しいバージョンで共有プロトコルが変わった場合、それらのチームの初期化やメンバーの追加・交代は拒否されるので、チームを作り直してください。
 

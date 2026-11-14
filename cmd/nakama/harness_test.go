@@ -285,6 +285,14 @@ func fakeHerdr(args []string) {
 			errOut(code)
 		}
 		fmt.Println(`{"result":{"ok":true}}`)
+	case "plugin update":
+		if os.Getenv("FAKE_PLUGIN_UPDATE_FAIL") != "" {
+			fmt.Fprintln(os.Stderr, "error: unrecognized subcommand 'update'")
+			os.Exit(2)
+		}
+		fmt.Println(`{"result":{"ok":true}}`)
+	case "plugin list":
+		fmt.Printf(`{"result":{"plugins":[{"source":{"kind":"%s"}}]}}`+"\n", env("FAKE_PLUGIN_SOURCE", "local"))
 	case "plugin pane":
 		if os.Getenv("NAKAMA_FAKE_PLUGIN_OPEN_FAIL") != "" {
 			errOut("plugin_pane_open_failed")

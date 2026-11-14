@@ -1,6 +1,6 @@
 id = "forsakesoul.nakama"
 name = "Nakama"
-version = "0.0.4"
+version = "0.0.5"
 min_herdr_version = "0.9.3"
 description = "Native Herdr plugin that creates, initializes and restores Owner/Worker/Advisor coding-agent teams."
 platforms = ["macos"]
@@ -33,6 +33,19 @@ id = "rebind"
 title = "Herdr team: rebind (explicit rebind after restart, needs --team)"
 contexts = ["global"]
 command = ["bin/nakama", "rebind"]
+
+[[actions]]
+id = "version"
+title = "Herdr team: version (also checks the latest release)"
+contexts = ["global"]
+command = ["bin/nakama", "version", "--check"]
+
+# update only replaces a linked release package; GitHub installs are handed to `herdr plugin update`, source checkouts are left alone.
+[[actions]]
+id = "update"
+title = "Herdr team: update to the latest release"
+contexts = ["global"]
+command = ["bin/nakama", "update", "--yes"]
 
 [[actions]]
 id = "pick"
