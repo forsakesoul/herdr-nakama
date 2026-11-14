@@ -19,7 +19,7 @@
 ## ディレクトリ構成
 
 ```
-herdr-plugin.toml       manifest（actions: up / init / status / rebind / pick、pane: picker）
+herdr-plugin.toml       manifest（actions: up / init / status / rebind / version / update / pick、pane: picker）
 cmd/nakama/      実装（package main：config / engine / state / lock / identity / prompts / team …）
 bin/nakama       ビルド成果物（コミットしない。下記参照）
 prompts/{en,zh,ja}/      言語ごとの protocol.md + owner.md / worker.md / advisor.md
@@ -99,8 +99,11 @@ nakama send --team <id> --task <task_id> --to <メンバーキー> --title <タ�
 nakama send --team <id> --resend <req> [--to <メンバーキー>] [--from <メンバーキー>]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
+nakama version [--check]
+nakama update [--check] [--yes]
 ```
 
+- **`version` / `update`**：`version` はプラグインルートの `herdr-plugin.toml` にある `version` を表示し、ネットワークには接続しません。`--check` を付けると最新リリースも確認します。`update` はまず Herdr にインストール方法を問い合わせます。GitHub からのインストールは `herdr plugin update` を実行します。ソースのチェックアウト（プラグインルートに `.git` がある）は拒否し、実行すべきコマンドを示します。link したリリースパッケージは、このマシンのアーキテクチャ向けのパッケージをダウンロードし、そのリリースの `SHA256SUMS` で検証し（完全性の確認であり署名ではありません）、プラグインルートの隣に展開してから項目ごとに入れ替えます。パッケージに含まれないファイルは残ります。非対話環境では `--yes` が必要です。共有プロトコルが変わった場合は通知し、アップグレードのみでダウングレードはしません。どちらもプラグインアクション（`version`、`update`）としても使えます。
 - 新しいチーム名：`<プロジェクト短縮名 ≤8>_<12hex>`、一致するプロジェクトがなければ `task_`。サフィックスはナノ秒タイムスタンプと 6 バイトの暗号学的乱数を混ぜ、SHA-256 の先頭 6 バイトから生成し、外部ツールが認識できる固定形式を保ちます。ロール名は `<prefix>_design/_execute/_advisor`、全長 ≤32。既存チームは元の名前を使い続けます。
 - アンカーの pane/cwd は注入されたコンテキスト（`HERDR_PLUGIN_CONTEXT_JSON` / `HERDR_PANE_ID`）から取得し、`herdr pane get/current` で読み取り専用に検証します。**プラグインルートの `$PWD` をプロジェクトディレクトリとして使うことはなく**、特定できなければ拒否します。
 - すべての Herdr 呼び出しは `HERDR_BIN_PATH`（既定 `herdr`）を経由し、argv は引数ごとに渡します。eval やシェル文字列の連結はしません。

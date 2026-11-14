@@ -91,6 +91,8 @@ const usageText = `nakama — Herdr 原生编组插件（Owner / Worker / Adviso
   nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [...]  # 成员间投递消息（由各角色调用，见 send --help）
   nakama down --team <id> [--yes]                                            # 解散编组（状态归档，不关闭 pane）
   nakama resolve --team <id> --delivered | --not-delivered                   # 人工核对后处理结果不明的投递
+  nakama version [--check]                                                   # 显示版本；--check 同时查询最新发布
+  nakama update [--check] [--yes]                                            # 升级到最新发布
 
 引擎写法：<launcher>/<model>[:effort]，或 config.json 中 default_profile.engine_map 的简写。
 配置：$HERDR_PLUGIN_CONFIG_DIR/config.json，或 ${XDG_CONFIG_HOME:-$HOME/.config}/nakama/config.json
@@ -128,6 +130,10 @@ func (a *app) dispatch(args []string) error {
 		return a.cmdDown(args)
 	case "resolve":
 		return a.cmdResolve(args)
+	case "version", "--version":
+		return a.cmdVersion(args)
+	case "update":
+		return a.cmdUpdate(args)
 	case "", "-h", "--help", "help":
 		io.WriteString(a.stdout, L(usageText))
 		return nil
