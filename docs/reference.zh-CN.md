@@ -64,6 +64,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 - **语言**：CLI 输出与 agent 提示词按 `NAKAMA_LANG=en|zh|ja` 选择，未设置时依次看 `LC_ALL` / `LC_MESSAGES` / `LANG`（`zh*`、`ja*`），否则为英文。该变量由插件进程读取，需设置在启动 Herdr 的环境里。`up` 与 `init` 须使用同一语言：各语言提示词不同，中途切换会被当作 protocol hash 漂移而拒绝。
 - 参数优先级：CLI > `default_profile` > 内置中立默认（缺配置则报错，不内置个人 provider）。
+- **`auto_init`**：`default_profile.auto_init: true` 时，`up`（新建编组）与 `add` / `swap` 在启动成功后先释放自己的锁，再接着执行 `init`。默认关闭：分两步是为了让你在任何 prompt 发出前先核对各 pane 的模型和权限。用 `up` 恢复的半组不会自动初始化。
 - 引擎写法：`<launcher>/<model>[:effort]`，或 `engine_map` 的简写。
 - `cc` 不写 model 时默认 `claude-opus-5-5` + `medium`（即 `cc --model claude-opus-5-5 --effort medium`）；写了 model 而未写 effort 时不传 `--effort`，交给 Claude 自己的默认值。
 - **provider**：`pi` 角色的 provider 由 `default_profile.pi_provider` 提供（私有，勿入库）；缺则 `up` 在任何 split 之前拒绝。
@@ -94,6 +95,10 @@ nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
+nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <成员键>]
+nakama send --team <id> --resend <req> [--to <成员键>] [--from <成员键>]
+nakama down --team <id> [--yes]
+nakama resolve --team <id> --delivered | --not-delivered
 ```
 
 - 新组命名：`<项目短名 ≤8>_<12hex>`，未匹配时使用 `task_`；后缀由纳秒时间戳与 6 字节密码学随机数混合，经 SHA-256 取前 6 字节生成，保持外部工具可识别的固定格式。角色名 `<prefix>_design/_execute/_advisor`，全名 ≤32；已有组继续沿用原名。
@@ -108,6 +113,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 编组初始化之后，可以增减或替换 Worker / Advisor，包括卡住的成员。Owner 不可替换。一个编组包含 1 个 Owner、1–4 个 Worker 与 0–4 个 Advisor（默认 1 个 Worker；Advisor 引擎不为 `none` 时默认 1 个 Advisor，否则没有）；人数上限针对同时在册的成员，不限制实例号。同类有多个成员时，`swap` 与 `drop` 须指定 `--instance N`。新 pane 一律在锚点所在的 tab 内 split；无法核验时停止操作，不新开 tab 或窗口。
 
 - **入口**：在锚点或任一角色 pane 按 `prefix+u`，已有编组时显示管理菜单（`a` 添加 Advisor、`n` 添加 Worker、`x` 移除 Advisor、`r` 移除 Worker（不可移除最后一个）、`v` 替换 Advisor、`w` 替换 Worker、`c` 清理任务目录；同类有多个成员时菜单输入成员键如 `W2`，命令行 `--instance` 则用数字如 `2`），选引擎并确认后执行。命令行等价为 `nakama add / drop / swap --team <id>`。
+- **重绑与解散**：同一个菜单里，`b`（重绑）只在锚点或某个成员看起来是重启后的候选、或有未完成的重绑计划时显示；`d`（解散）始终显示。见“电脑或 Herdr 重启后恢复编组”和“解散编组”。
 - **两步完成**：`add` / `swap` 只创建 pane 并启动新实例；核对新实例的模型与授权后按 `prefix+i`，`init` 初始化新角色，再向其余在册角色各投递一次 `[TEAM_UPDATE]`（最新映射加该角色的新分工规则）。`drop` 没有新实例，直接投递。
 - **只通知空闲角色**：`[TEAM_UPDATE]` 只投给身份核验通过且 idle/done 的角色；忙碌或被对话框阻塞的角色保留待通知标记（`status` 显示 `team_update=pending`），空闲后重按 `prefix+i`。
 - **旧实例**：被替换或移除的实例记入状态的 `retired`，其 pane 不关闭、不改名、不再收到插件输入。替换 Worker 前请确认旧 Worker 已停止写入，之后自行处理该 pane。
@@ -119,11 +125,41 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 
 新建的编组带一个任务目录 `<项目目录>/.nakama/<编组ID>/`，路径记录在状态里并写进各角色的初始化提示词。`.nakama/.gitignore` 的内容是 `*`，整个目录不出现在 `git status` 和 diff 中。
 
-- **用途**：Owner 为每个业务任务创建 `<task_id>/` 子目录；交接包、NOTICE 和 Advisor 的结论各写成一个文件（如 `op_x_h1.md`、`W1-003.md`、`A1-002.md`），写后不改。角色之间的 prompt 只带消息头和文件路径；写文件不等于投递，仍要实际发送 NOTICE。中途加入或替换的角色从这里读取最新交接。规则见[共享协议](../prompts/zh/protocol.md)。
+- **用途**：成员之间的每条消息在这里各是一个文件。`nakama send` 首次使用时创建 `<task_id>/` 子目录，把每条消息写成 `<成员键>-<序号>.md`（如 `O1-000.md`、`W1-003.md`），开头是消息头和关联字段，其后是完整正文；另有 `ledger.jsonl` 记录每一次投递尝试。消息文件写入后不再修改。中途加入或替换的角色从这里读取最新交接。见“成员间消息”和[共享协议](../prompts/zh/protocol.md)。
 - **不自动清理**：任务完成不等于删除授权。Owner 交付时报告一次目录路径；只有你明确说可以删除，它才执行提示词里给出的清理命令。
 - **自己清理**：管理菜单的 `c`，或 `nakama clean`。不带选择参数时列出所有任务目录（文件数、大小、最后修改时间），在终端里输入编号选择并确认；`--team <id> --task <task_id>` 或 `--all` 直接选择，非交互环境需加 `--yes`。
 - **防误删**：只删除状态里记录的任务目录下的直接子目录，不跟随符号链接；该编组的 Worker 或 Advisor（含已停用实例）处于 working/blocked，或状态查不到时，默认拒绝，加 `--force` 才删。请求是否结清由 Owner 按协议判断，插件无法得知。
 - **旧组**：本版本之前创建的编组没有任务目录，仍按正文内联的方式通信。
+
+## 成员间消息
+
+各角色用 `nakama send` 投递业务消息，不再手写 `herdr agent prompt`；完整命令行（已填好状态目录和编组 ID）写在每个角色的初始化 prompt 里。
+
+- **一次发送做什么**：按任务目录里已有的文件分配请求号 `<task_id>/<成员键>-<序号>`，写入消息文件，核验收件人的冻结身份，再投递一条只含消息头、关联字段和 `file=<路径>` 的 prompt。`--reply sync` 最多等待 120 秒，然后输出收件人最近的回复。
+- **收件人不可用时**：只有 idle/done 的收件人会收到输入。working 时最多等待 60 秒一次；仍在 working、blocked、unknown 或身份漂移时不发送任何输入，命令输出 `delivery=NOT_SENT` 并以非零退出。消息和请求号保留在磁盘上，之后用 `--resend <req>` 投递同一条消息。
+- **投递状态**：`SENT`；`NOT_SENT`；`UNKNOWN`（prompt 命令失败且无法证明输入是否送达，重投前先用 `herdr agent read` 核对）；`SYNC`（`--no-deliver`：只记录、不反向投递的同步答复）。prompt 发出前先记为 `UNKNOWN`，所以进程被杀不会把一条可能已送达的消息留成未发送。
+- **代收转交**：由作者以外的成员执行 `--resend <req> --to <成员>`，消息原样转交，消息头多出 `relayed_by`。
+- **发件人**：pane 等于 `HERDR_PANE_ID` 的成员。只有拿不到该变量时才需要 `--from`；两者都有时必须一致。
+- **`status`**：对每个有台账的任务输出消息数和未结项：还没有 `DONE` 答复的请求（`WAITING`、`BLOCKED`、`PAUSED`），以及最后一次投递为 `NOT_SENT` 或 `UNKNOWN` 的消息。这个视图由台账推导；请求是否结清仍由各角色按协议裁决。
+- **不取锁**：`send` 只读编组状态，不取 team 锁。请求号用排他的硬链接分配，所以被中断的 `send` 不会留下卡住整个编组的遗留锁。
+- **没有任务目录时**（`.nakama` 路径是符号链接）：`send` 拒绝执行，各角色按协议回落到正文内联。
+
+## 解散编组
+
+`nakama down --team <id>`（或管理菜单的 `d`）把编组的状态文件移到 `$HERDR_PLUGIN_STATE_DIR/archive/<id>.json`。此后锚点 pane 可以重新建组，`init` / `send` / `rebind` / `status` 都不再看到旧编组。
+
+- 不关闭、不改名任何 pane，也不向任何成员发送输入；命令会列出成员 pane，由你自行处理。
+- 空的任务目录会被删除；有消息的任务目录保留，并输出其路径。
+- 执行前要求确认，非交互环境需要 `--yes`。`--team` 必填，不按 pane 推断。
+- 状态文件已无法通过校验时同样可用，否则这种情况会一直占住锚点。
+
+## 处理结果不明的投递
+
+`init` 或 `[TEAM_UPDATE]` 以不明结果结束时（例如 `agent_prompt_stalled`），编组停住，不会重发。先到 pane 里看一眼，再把看到的结果告诉插件：`nakama resolve --team <id> --delivered` 会在重新核验身份后把该角色记为已初始化（或把更新记为已送达）；`--not-delivered` 清除标记，下一次 `init` 重新发送。适用时 `status` 会给出这条提示。
+
+- 只处理 `prompt`、`team_update`、`rename` 三种步骤。`split` 或启动的不明结果涉及 pane 与进程归属，不做猜测：用 `down` 解散后重建。
+- 记录 session 为空的角色现在上报了 session 时，`--not-delivered` 会被拒绝：Codex 收到首条输入才创建 session，这就是 prompt 已送达的证据。
+- 启动后取证失败不需要 `resolve`：取证是只读的，下一次 `up` / `init` 会直接重试，`up` 随后启动尚未启动的成员。
 
 ## 状态与安全
 
@@ -153,6 +189,8 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
    - `--confirm-anchor` 只用于没有 identity 的 shell 锚点，值必须等于本次观测到的新 terminal。
    - 记录 session 非空的角色不接受确认覆盖：观测必须与记录相等。
 3. 无需重绑（身份与名称都已一致）时输出 `无需重绑` 且不写状态；重复执行是完整 no-op，不增加 `team_rev`，也不增加审计。
+
+**从管理菜单重绑。** 编组看起来是重启后的候选时，菜单显示 `b`。它输出同样的预检结果，列出需要显式确认的值，确认后正是用这些值执行 `rebind`；`rebind` 会重新观测，值不再一致就拒绝。
 
 **拒绝条件（全部零 rename、零状态写入）。** 编组不是 `initialized`、存在 pending、任一角色 stale 或未初始化；pane 不可读；
 pane 的 workspace/tab/cwd 与记录不一致；kind 变化；观测 session 为空，或与记录不同；任务名既不是空也不是 Bridge 精确自动名（可能是他人占用）；
@@ -185,6 +223,8 @@ CLI 无法证明 Herdr server 命名空间；锚点证据是 `pane get` 的 work
 
 `prompts/<lang>/{protocol,owner,worker,advisor}.md` 是共享协议与角色正文的唯一权威源，运行时直接读取；`protocol_version` 为所选语言 `protocol.md` 的 sha256。中文为原文，英文与日文为译文，须保持相同的 `<!-- … -->` 标记（由测试检查）。下游如需复用这些模板，应从本目录同步并自行校验来源版本。手动 Skill 的授权写在项目上下文文件或需求里，协议本身不预置任何 Skill 名单。
 
+`protocol.md` 中 `<!-- role:owner,worker -->` 与 `<!-- /role -->` 之间的行只发给列出的角色，其余内容所有角色都会收到。`protocol_version` 仍是整份文件的 sha256。
+
 架构任务在已安装 `architecture` Skill（用户自定义，插件不提供）时按当前角色读取，未安装则按原交接契约继续并注明缺口。插件不自动安装 Skill、不改变角色分工或派生团队。模板变更不会刷新已有角色上下文；未完成初始化的旧组仍受原协议 hash 漂移检查保护，不清除状态绕过。
 
 用户主动要求任一角色压缩时，使用已安装 [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill（用户自定义的压缩 Skill，插件不内置）的自动压缩分支；本插件只保留与既有职责、暂停/恢复授权及请求状态的衔接规则。后台控制只针对调用者自己的会话，未安装或控制面不支持时保留恢复信息并报告缺口。
@@ -207,6 +247,10 @@ go build -trimpath -o bin/nakama ./cmd/nakama
 - Herdr server 命名空间无法由 CLI 直接证明；锚点证据以 `pane get` 的 `terminal_id` 连续性（init/已有组时比对）代替，本文档如实记录该边界。
 - `rebind` 的改名与 Bridge 自动命名之间存在无法消除的竞争窗口（见「电脑或 Herdr 重启后恢复编组」）；漂移时停止并保留计划。
 - `rebind` 的 Herdr 调用只经假 herdr harness 验证；真实 Herdr 0.9.3 上 `agent rename` 的返回与 `plugin action invoke` 传参方式未在本版本采样。
+- `send` 与 `down` 已在真实 Herdr 0.9.5 上用 Claude Code、Codex、Pi、Qoder 成员端到端跑过：每种引擎都收到交接、完成任务并自己执行 `send` 回报；另外覆盖了收件人忙碌时的有界等待及随后的 `NOT_SENT`、`--resend`、用 `--no-deliver` 答复的同步请求，以及 30 个并发发送。未在真实 Herdr 上取样的有：菜单内重绑，以及 `auto_init` 紧接启动后的时序。
+- 插件对成员状态的全部了解都来自 Herdr 的状态识别。Qoder CLI 1.1.89 匹配不到 Herdr 识别清单里的任何规则，始终被报告为 `idle`：正在工作的 Qoder 照样会收到 prompt，`--reply sync` 或 `init` 可能在 prompt 已送达的情况下以 `agent_prompt_stalled` 结束（用 `resolve` 处理）。Codex 出现过一轮进行中被短暂报成空闲的情况，所以 `send` 要求连续两次观测到空闲才投递，这只能缩小窗口，不能消除。
+- 被 Herdr 报成空闲的启动对话框会吞掉输入。pane 屏幕上出现 `enter … · esc …` 形式的对话框页脚时 `init` 会拒绝（在 Codex 上见过目录信任、钩子审查等三种）；这是对屏幕文字的匹配，其他对话框抓不到，Qoder 的目录信任对话框就没有可区分的页脚。另外见过仍在启动的 Codex 接收了初始化 prompt 却没有回复。
+- `send` 先查收件人状态再投递；两个发件人同时看到同一收件人空闲时都会投递，第二条 prompt 到达时收件人已在 working。Herdr 没有“比较后发送”的语义，接收方仍依赖协议里“同一 req 只推进一次”的规则。
 - 手动启动器（pi/cc/ccenv）首次冻结要求「split 时记录的 terminal_id == 首次 agent get 的 terminal_id」+「kind 等于期望种类」+「实例未被他人具名」；任一不满足即 UNKNOWN 停止。唯一名称兼容项是外部 Bridge 的精确自动名（项目目录 slug + terminal_id 的 SHA-256 前 4 位）：完整启动指纹仍一致时允许替换为角色名；其他名字、缺少启动指纹或指纹漂移仍拒绝。时间戳用于区分创建批次，这项兼容用于避免自动命名阻断 init。
 - 半组补建只在 pane 占用状态为 `idle`（确证 `agent_not_found`）时启动；`occupied` 与 `unknown`（get 失败/对象不完整）都在启动前非零终止。
 - `agent start` 的返回体结构未采样，不依赖其取证；native 身份一律用有界 `agent get`。

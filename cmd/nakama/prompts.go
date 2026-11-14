@@ -49,6 +49,30 @@ func renderRole(tpl, variant string, incMid bool) string {
 	return out.String()
 }
 
+// protocol.md 里 <!-- role:owner,worker --> … <!-- /role --> 之间的行只发给列出的角色，其余行所有角色都收到。
+// protocol_version 仍是整份文件的 sha256，与角色无关。
+func renderProtocol(proto, kind string) string {
+	var out strings.Builder
+	keep := true
+	for _, line := range strings.Split(strings.TrimSuffix(proto, "\n"), "\n") {
+		switch {
+		case strings.HasPrefix(line, "<!-- role:"):
+			keep = false
+			for _, k := range strings.Split(strings.TrimSuffix(strings.TrimPrefix(line, "<!-- role:"), " -->"), ",") {
+				keep = keep || k == kind
+			}
+			continue
+		case line == "<!-- /role -->":
+			keep = true
+			continue
+		}
+		if keep {
+			out.WriteString(line + "\n")
+		}
+	}
+	return out.String()
+}
+
 // 只取命中 variant 的 team-rule 块正文（[TEAM_UPDATE] 用它更新分工）。
 func teamRule(tpl, variant string) string {
 	var out strings.Builder
@@ -135,8 +159,10 @@ func (a *app) mappingExtras(t *Team) string {
 	}
 	if t.TaskDir != "" {
 		exe, _ := os.Executable()
-		cmd := "HERDR_PLUGIN_STATE_DIR=" + posixQuote(a.st.dir) + " " + posixQuote(exe) + " clean --team " + t.TeamID + " --task <task_id> --yes"
-		fmt.Fprintf(&b, L("任务目录=%s。清理命令（仅在用户明确授权删除后执行）：%s\n"), t.TaskDir, cmd)
+		bin := "HERDR_PLUGIN_STATE_DIR=" + posixQuote(a.st.dir) + " " + posixQuote(exe)
+		fmt.Fprintf(&b, L("任务目录=%s。清理命令（仅在用户明确授权删除后执行）：%s\n"), t.TaskDir, bin+" clean --team "+t.TeamID+" --task <task_id> --yes")
+		fmt.Fprintf(&b, L("发送命令（成员间的业务消息一律经它投递，参数见共享交接协议）：%s send --team %s --task <task_id> --to <成员键> --title '<动作：对象>' --file <正文文件>\n"), bin, t.TeamID)
+		fmt.Fprintf(&b, L("状态命令（列出未答复请求与未送达消息）：%s\n"), bin+" status --team "+t.TeamID)
 	}
 	return b.String()
 }
@@ -174,10 +200,10 @@ func (a *app) assemblePrompt(t *Team, key string) (string, error) {
 	if err != nil {
 		return "", a.fail(L("无法读取 protocol.md：%v"), err)
 	}
-	b.Write(proto)
+	kind := kindOf(key)
+	b.WriteString(renderProtocol(string(proto), kind))
 	b.WriteString("\n\n")
 
-	kind := kindOf(key)
 	incMid := kind != "owner" && t.owner().Inited
 	tpl, err := os.ReadFile(a.promptPath(kind))
 	if err != nil {

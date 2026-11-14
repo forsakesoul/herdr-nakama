@@ -87,6 +87,8 @@ description = "nakama: init（初始化当前 anchor 的编组）"
 | `r` / `x` | 移除 Worker / Advisor |
 | `w` / `v` | 替换 Worker / Advisor（换引擎，或换掉没有进展的成员） |
 | `c` | 清理任务记录 |
+| `b` | 重启后重绑编组（仅在需要时显示） |
+| `d` | 解散编组：状态归档，pane 保留 |
 
 - 添加或替换后，等新成员启动好再按一次 `prefix+i`：新成员完成初始化，其他成员收到最新的成员名单。
 - 新成员只在当前标签页内打开。Worker 至少保留 1 个，Worker 和 Advisor 各最多 4 个，Owner 不可替换。
@@ -104,9 +106,11 @@ nakama rebind --team <id> --confirm-anchor <新锚点 terminal>
 
 按预检输出的提示补充确认参数。恢复的是原来那支队伍，各成员保留原有对话。拒绝条件和部分失败后的处理见[参考文档](docs/reference.zh-CN.md)。
 
+也可以在编组任一 pane 按 `prefix+u` 选 `b`：它显示同样的预检结果，确认后按观测到的值重绑。
+
 ## 任务记录
 
-每个编组在项目目录下有一个 `.nakama/<编组ID>/` 目录，保存交接包、回报和审查结论，默认不进入 Git。任务完成后不会自动删除：你说可以删，Owner 才清理；也可以用管理菜单的 `c` 或 `nakama clean` 自己清理。
+每个编组在项目目录下有一个 `.nakama/<编组ID>/` 目录，保存交接包、回报和审查结论，默认不进入 Git。任务完成后不会自动删除：你说可以删，Owner 才清理；也可以用管理菜单的 `c` 或 `nakama clean` 自己清理。 成员之间通过 `nakama send` 互发消息：它为每条消息编号、把正文存到这里，并在台账里记录是否送达；`nakama status` 会列出还没等到答复的请求和没送达的消息。
 
 ## 配置
 
@@ -130,6 +134,7 @@ nakama rebind --team <id> --confirm-anchor <新锚点 terminal>
 
 - 引擎写法是 `<launcher>/<model>[:effort]`，也可以在 `engine_map` 里定义简写。
 - `projects` 为指定仓库设置编组名前缀和项目背景文件，初始化时一并带给各成员。
+- `default_profile.auto_init: true` 会在建组、加人或换人后接着初始化。默认关闭，方便你先核对各 pane 的模型和权限。
 - 界面和提示词语言由 `NAKAMA_LANG=en|zh|ja` 决定，未设置时跟随系统语言；需设置在启动 Herdr 的环境里。
 - 各启动器的细节（`pi` 的 provider、`ccenv`、Claude 模型预设）见[参考文档](docs/reference.zh-CN.md)。
 
@@ -144,6 +149,9 @@ nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
+nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [...]
+nakama down --team <id> [--yes]
+nakama resolve --team <id> --delivered | --not-delivered
 ```
 
 ## 升级

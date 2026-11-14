@@ -87,6 +87,8 @@ description = "nakama: init（現在のアンカーのチームを初期化）"
 | `r` / `x` | Worker / Advisor を削除 |
 | `w` / `v` | Worker / Advisor を交代（エンジンの変更や、進まないメンバーの入れ替え） |
 | `c` | タスク記録を削除 |
+| `b` | 再起動後にチームを再バインド（必要なときだけ表示） |
+| `d` | チームを解散：状態をアーカイブし、pane は残す |
 
 - 追加または交代のあとは、新しいメンバーの起動を待ってからもう一度 `prefix+i` を押します。新しいメンバーが初期化され、ほかのメンバーには最新のメンバー一覧が届きます。
 - 新しいメンバーは現在のタブ内にのみ開きます。Worker は最低 1 名を残し、Worker と Advisor はそれぞれ最大 4 名、Owner は交代できません。
@@ -104,9 +106,11 @@ nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal>
 
 プリフライトの出力に従って確認引数を追加します。元のチームがそのまま戻り、各メンバーの会話も保たれます。拒否条件と部分的に失敗した場合の対処は[リファレンス](docs/reference.ja.md)を参照してください。
 
+チームの任意の pane で `prefix+u` を押して `b` を選ぶこともできます。同じプリフライトを表示し、確認後に観測した値で再バインドします。
+
 ## タスク記録
 
-各チームはプロジェクト内に `.nakama/<チームID>/` ディレクトリを持ち、引き継ぎ、報告、レビュー結論を保存します。既定で Git の対象外です。タスクが終わっても自動では削除されません。あなたが許可したときだけ Owner が削除し、管理メニューの `c` や `nakama clean` で自分で削除することもできます。
+各チームはプロジェクト内に `.nakama/<チームID>/` ディレクトリを持ち、引き継ぎ、報告、レビュー結論を保存します。既定で Git の対象外です。タスクが終わっても自動では削除されません。あなたが許可したときだけ Owner が削除し、管理メニューの `c` や `nakama clean` で自分で削除することもできます。 メンバー同士は `nakama send` でメッセージをやり取りします。このコマンドが各メッセージに番号を付け、本文をここに保存し、届いたかどうかを台帳に記録します。`nakama status` は、まだ回答のないリクエストと届いていないメッセージを一覧します。
 
 ## 設定
 
@@ -130,6 +134,7 @@ nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal>
 
 - エンジンは `<launcher>/<model>[:effort]` の形式か、`engine_map` に定義した短縮名で指定します。
 - `projects` では、リポジトリごとにチーム名の接頭辞と、初期化時に全メンバーへ渡すプロジェクト背景ファイルを設定します。
+- `default_profile.auto_init: true` にすると、チームの作成やメンバーの追加・交代の直後に続けて初期化します。既定ではオフで、先に各 pane のモデルと権限を確認できます。
 - 画面とプロンプトの言語は `NAKAMA_LANG=en|zh|ja` で決まり、未設定の場合はシステムのロケールに従います。Herdr を起動する環境で設定してください。
 - ランチャーごとの詳細（`pi` の provider、`ccenv`、Claude モデルのプリセット）は[リファレンス](docs/reference.ja.md)にあります。
 
@@ -144,6 +149,9 @@ nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
+nakama send --team <id> --task <task_id> --to <メンバーキー> --title <タイトル> --file <本文ファイル> [...]
+nakama down --team <id> [--yes]
+nakama resolve --team <id> --delivered | --not-delivered
 ```
 
 ## アップグレード

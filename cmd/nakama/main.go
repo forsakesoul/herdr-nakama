@@ -1,4 +1,4 @@
-// nakama：Owner/Worker/Advisor 编组的 Herdr 原生插件（up / init / status / rebind / pick / add / drop / swap / clean）。
+// nakama：Owner/Worker/Advisor 编组的 Herdr 原生插件（up / init / status / rebind / pick / add / drop / swap / clean / send / down）。
 package main
 
 import (
@@ -88,6 +88,9 @@ const usageText = `nakama — Herdr 原生编组插件（Owner / Worker / Adviso
   nakama drop --team <id> [--role worker|advisor] [--instance N]       # 移除 Worker 或 Advisor
   nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]  # 替换角色实例（旧 pane 保留）
   nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]  # 列出 / 清理任务目录
+  nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [...]  # 成员间投递消息（由各角色调用，见 send --help）
+  nakama down --team <id> [--yes]                                            # 解散编组（状态归档，不关闭 pane）
+  nakama resolve --team <id> --delivered | --not-delivered                   # 人工核对后处理结果不明的投递
 
 引擎写法：<launcher>/<model>[:effort]，或 config.json 中 default_profile.engine_map 的简写。
 配置：$HERDR_PLUGIN_CONFIG_DIR/config.json，或 ${XDG_CONFIG_HOME:-$HOME/.config}/nakama/config.json
@@ -119,6 +122,12 @@ func (a *app) dispatch(args []string) error {
 		return a.cmdSwap(args)
 	case "clean":
 		return a.cmdClean(args)
+	case "send":
+		return a.cmdSend(args)
+	case "down":
+		return a.cmdDown(args)
+	case "resolve":
+		return a.cmdResolve(args)
 	case "", "-h", "--help", "help":
 		io.WriteString(a.stdout, L(usageText))
 		return nil

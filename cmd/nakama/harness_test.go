@@ -253,6 +253,9 @@ func fakeHerdr(args []string) {
 		if r.sess != "" {
 			sess = `{"value":"` + r.sess + `"}`
 		}
+		if n, _ := strconv.Atoi(os.Getenv("NAKAMA_FAKE_SESSION_AFTER")); n > 0 && sess == "null" && counter(log+".sessget."+r.pane) > n {
+			sess = `{"value":"sess-late"}`
+		}
 		status := env("FAKE_STATUS", "idle")
 		if seq := os.Getenv("NAKAMA_FAKE_STATUS_SEQ"); seq != "" {
 			// 按成功 get 的次序逐个给出状态，末项重复；blocked/unknown 时无 session，进入 idle 等稳定状态后才上报 NAKAMA_FAKE_LATE_SESSION。
@@ -287,6 +290,11 @@ func fakeHerdr(args []string) {
 			errOut("plugin_pane_open_failed")
 		}
 		fmt.Println(`{"result":{"ok":true}}`)
+	case "pane read":
+		if os.Getenv("FAKE_PANE_READ_FAIL") != "" {
+			errOut("server_unavailable")
+		}
+		fmt.Println(os.Getenv("FAKE_PANE_TEXT"))
 	case "agent read":
 		fmt.Println("recent output")
 	case "agent list":

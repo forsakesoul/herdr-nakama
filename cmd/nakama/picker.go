@@ -272,7 +272,49 @@ func (a *app) askInstance(t *Team, kind string) (string, error) {
 	return key, nil
 }
 
-// 已有编组的管理菜单：增减与替换 Worker / Advisor、清理任务目录。引擎仍在创建时冻结，换模型即替换实例。
+// 重启后的候选（锚点或任一成员仅 terminal / 任务名变化），或有未完成的重绑计划：菜单才显示重绑。
+func (a *app) rebindSuggested(t *Team) bool {
+	if t.RebindPending != nil || a.rebindAnchorBinding(t) == "candidate" {
+		return true
+	}
+	for _, key := range t.members() {
+		if label, _ := a.rebindRoleBinding(t.role(key)); label == "candidate" {
+			return true
+		}
+	}
+	return false
+}
+
+// 菜单里的重绑：先只读预检并显示差异，把预检要求显式确认的观测值作为参数交给 rebind。
+// rebind 执行时会重新观测，确认值与那次观测不一致即拒绝，所以这里不会接纳用户没看到的值。
+func (a *app) menuRebindArgs(t *Team) ([]string, error) {
+	args := []string{"--team", t.TeamID}
+	if t.RebindPending != nil {
+		a.outf(L("存在未完成的重绑计划 %s：先整组复核，已完成的改名不重发。\n"), t.RebindPending.OpID)
+		return args, nil
+	}
+	if msg := rebindApplicable(t); msg != "" {
+		return nil, a.pickReject("%s", msg)
+	}
+	res := a.observeRebind(t, rebindOpts{confirm: map[string]string{}})
+	a.outf(L("== rebind 预检：编组 %s ==\n"), t.TeamID)
+	a.outRebindDiff(res)
+	if len(res.problems) > 0 {
+		for _, p := range res.problems {
+			a.errf("%s", p)
+		}
+		return nil, a.pickReject(L("拒绝重绑：预检不满足，零 rename、零状态写入。"))
+	}
+	for _, n := range res.needNotes {
+		a.outf("  - %s\n", n)
+	}
+	for _, s := range res.needArgs {
+		args = append(args, strings.SplitN(s, " ", 2)...)
+	}
+	return args, nil
+}
+
+// 已有编组的管理菜单：增减与替换 Worker / Advisor、清理任务目录、重绑与解散。引擎仍在创建时冻结，换模型即替换实例。
 func (a *app) teamMenu(cfg *config, id string) error {
 	t, err := a.st.load(id)
 	if err != nil {
@@ -301,6 +343,8 @@ func (a *app) teamMenu(cfg *config, id string) error {
 		{"v", L("  v  替换 Advisor\n"), nA >= 1},
 		{"w", L("  w  替换 Worker（旧 pane 保留，请先确认它已停止写入）\n"), nW >= 1},
 		{"c", L("  c  清理任务目录\n"), true},
+		{"b", L("  b  重绑（电脑或 Herdr 重启后恢复本编组）\n"), a.rebindSuggested(t)},
+		{"d", L("  d  解散编组（状态归档，不关闭 pane）\n"), true},
 	}
 	enabled := map[string]bool{}
 	for _, m := range menu {
@@ -331,6 +375,16 @@ func (a *app) teamMenu(cfg *config, id string) error {
 	var run func() error
 	var summary string
 	switch choice {
+	case "b":
+		args, err := a.menuRebindArgs(t)
+		if err != nil {
+			return err
+		}
+		summary = L("按以上观测值重绑")
+		run = func() error { return a.cmdRebind(args) }
+	case "d":
+		summary = L("解散编组")
+		run = func() error { return a.cmdDown([]string{"--team", id, "--yes"}) }
 	case "a", "n":
 		eng, err := a.askEngine(cfg, kind, label, false, "")
 		if err != nil {

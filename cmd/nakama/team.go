@@ -255,6 +255,11 @@ func (a *app) pendingGuard(t *Team) bool {
 		t.Pending = nil
 		return a.save(t) == nil
 	}
+	// 启动后的取证只读、不是副作用：上次没取到（识别慢、对话框超时）就再取一次，取到即可继续。
+	if t.Pending.Step == "identity" && t.role(t.Pending.Role) != nil && a.captureIdentity(t, t.Pending.Role) {
+		t.Pending = nil
+		return a.save(t) == nil
+	}
 	d := t.Pending.Delivery
 	if d == "" {
 		d = "UNKNOWN"
@@ -485,7 +490,16 @@ func (a *app) cmdUp(args []string) error {
 		a.outf("- %s %s pane %s：%s\n", kindOf(key), key, t.role(key).Pane, a.hint(t.role(key).Engine))
 	}
 	a.outf("%s", L("- cc/ccenv/pi 需等 Herdr 识别（herdr agent list）后运行 nakama init\n"))
-	return nil
+	return a.autoInit(cfg, t)
+}
+
+// auto_init 打开时接着初始化。init 自己取 team 锁，而本插件的锁不可重入，所以先放掉建组 / 变更持有的锁。
+func (a *app) autoInit(cfg *config, t *Team) error {
+	if !cfg.autoInit() {
+		return nil
+	}
+	a.unlockAll()
+	return a.cmdInit([]string{"--team", t.TeamID})
 }
 
 // 已存在编组：在 team 锁内重读状态后再决策。
@@ -503,7 +517,7 @@ func (a *app) upExisting(id string) error {
 	if !a.pendingGuard(t) {
 		return a.fail(L("编组 %s 有未确认副作用（UNKNOWN），停止；请人工 get/read 核对，不重发。"), id)
 	}
-	if t.Phase == "starting" {
+	if t.Phase == "starting" || t.Phase == "panes_ready" {
 		// 恢复会产生新的 split/启动，先核对冻结的 protocol/context hash，漂移则零副作用拒绝。
 		if err := a.checkVersions(t); err != nil {
 			return err
@@ -879,6 +893,15 @@ func (a *app) initRole(t *Team, rn string) int {
 		return 2
 	}
 
+	dialog, readOK := a.startupDialog(string(r.Pane))
+	if !readOK {
+		a.errf(L("无法读取 %s 的 pane %s 屏幕，不能确认没有启动对话框；停止，未发送输入。"), rn, string(r.Pane))
+		return 2
+	}
+	if dialog {
+		a.errf(L("%s 的 pane %s 停在启动对话框（输入会被对话框吞掉）；先到该 pane 处理，再重跑 init。"), rn, string(r.Pane))
+		return 2
+	}
 	a.outf("== Init %s (%s) ==\n", rn, r.Engine)
 	prompt, err := a.assemblePrompt(t, rn)
 	if err != nil {
@@ -992,6 +1015,7 @@ func (a *app) statusTeam(t *Team) {
 			files, size = files+k.files, size+k.size
 		}
 		a.outf("  task_dir=%s tasks=%d files=%d size=%s\n", t.TaskDir, len(tasks), files, humanSize(size))
+		a.statusTasks(t)
 	}
 	if candidate {
 		a.outf(L("  提示：存在 candidate（同 pane/kind 的候选，不保证可重绑）：可能需要显式 rebind --team %s，请先 --preflight 核对；status 不改动状态。\n"), t.TeamID)
@@ -1004,6 +1028,9 @@ func (a *app) statusTeam(t *Team) {
 				role = "?"
 			}
 			a.warnf(L("存在未确认副作用（role=%s step=%s delivery=%s）：先 herdr agent get/read 人工核对，不重发。"), role, p.Step, p.Delivery)
+			if resolvable[p.Step] {
+				a.outf(L("  人工核对后用 nakama resolve --team %s --delivered 或 --not-delivered 处理。\n"), t.TeamID)
+			}
 		}
 	}
 }

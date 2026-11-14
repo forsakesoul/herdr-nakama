@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// 编组变更（add / drop / swap）、[TEAM_UPDATE] 投递，以及任务目录的创建、列出与清理。
+// 编组变更（add / drop / swap / down）、[TEAM_UPDATE] 投递，以及任务目录的创建、列出与清理。
 // 不变量：Owner 不可变更；Worker 1..4、Advisor 0..4 在册；被替换/移除的实例只记入 retired，
 // 不关闭其 pane、不向其发送输入；实例号不复用。
 
@@ -217,7 +217,10 @@ func (a *app) changeRole(t *Team, cfg *config, kind, cliEngine, oldKey string) e
 	if err := a.save(t); err != nil {
 		return err
 	}
-	return a.resumeChange(t)
+	if err := a.resumeChange(t); err != nil {
+		return err
+	}
+	return a.autoInit(cfg, t)
 }
 
 // 上一次 add / swap 中断：先补齐它，本次参数不执行，补齐后由用户重跑。
@@ -293,6 +296,141 @@ func (a *app) cmdDrop(args []string) error {
 	a.outf(L("编组 %s 已变更（team_rev=%d）。\n"), t.TeamID, t.TeamRev)
 	if !a.deliverTeamUpdates(t) {
 		return errExit
+	}
+	return nil
+}
+
+// resolve：用户人工核对后，告知一次结果不明的投递是否已送达。只处理“重发一次也安全、或可由 init 重做”的步骤；
+// split / run 的不明结果涉及 pane 与进程归属，不在这里猜，用 down 解散重建。
+var resolvable = map[string]bool{"prompt": true, "team_update": true, "rename": true}
+
+func (a *app) cmdResolve(args []string) error {
+	v, help, err := a.parseArgs(args, L("用法：nakama resolve --team <id> --delivered | --not-delivered\n"), []string{"--team"}, []string{"--delivered", "--not-delivered"})
+	if help || err != nil {
+		return err
+	}
+	id := first(v["--team"])
+	_, yes := v["--delivered"]
+	_, no := v["--not-delivered"]
+	if id == "" || yes == no {
+		return a.fail(L("resolve 必须指定 --team <id>，并在 --delivered 与 --not-delivered 中选一个。"))
+	}
+	if !a.st.exists(id) {
+		return a.fail(L("编组不存在：%s"), id)
+	}
+	if err := a.lock("team-"+id, "resolve"); err != nil {
+		return err
+	}
+	t, err := a.st.load(id)
+	if err != nil {
+		return a.fail("%v", err)
+	}
+	p := t.Pending
+	if p == nil {
+		a.outf(L("编组 %s 没有待确认的副作用。\n"), id)
+		return nil
+	}
+	r := t.role(p.Role)
+	if !resolvable[p.Step] || r == nil {
+		return a.fail(L("step=%s 的未确认副作用不能用 resolve 处理：人工核对后用 down 解散并重建。"), p.Step)
+	}
+	if yes && p.Step == "prompt" {
+		// 记为已初始化前，冻结身份必须仍与观测一致。
+		if r.Identity == nil {
+			return a.fail(L("角色 %s 缺少冻结身份，不能记为已初始化。"), p.Role)
+		}
+		obj, msg := a.verifyIdentity(t, p.Role, r.Identity, false)
+		if filled, ok := fillSession(*r.Identity, obj.ident()); msg != "" && ok {
+			r.Identity, msg = &filled, ""
+		}
+		if msg != "" {
+			return a.fail("%s", msg)
+		}
+		r.Inited = true
+	}
+	// Codex 收到首条输入后才有 session：记录为空而现在观测到了，就是已送达的证据，不接受“未送达”。
+	if no && p.Step == "prompt" && r.Identity != nil {
+		if o, ok := a.agentGet(string(r.Pane)); ok {
+			if _, arrived := fillSession(*r.Identity, o.ident()); arrived {
+				return a.fail(L("%s 的 session 在这次投递后才出现，说明输入已送达；请核对其回复后用 --delivered。"), p.Role)
+			}
+		}
+	}
+	if yes && p.Step == "team_update" {
+		r.TeamUpdate = false
+	}
+	how := "--not-delivered"
+	if yes {
+		how = "--delivered"
+	}
+	t.Pending = nil
+	if err := a.save(t); err != nil {
+		return err
+	}
+	a.outf(L("已按人工核对结果处理 %s 的 %s（%s）；重跑 init 继续。\n"), p.Role, p.Step, how)
+	return nil
+}
+
+// down：解散编组。只把状态文件移入 archive/，让锚点 pane 可以重新建组；不关闭或改名任何 pane，也不向成员发送输入。
+// 状态文件损坏时同样可用：损坏的文件仍会占住锚点，这里是唯一不用手删文件的出口。
+func (a *app) cmdDown(args []string) error {
+	v, help, err := a.parseArgs(args, L("用法：nakama down --team <id> [--yes]\n"), []string{"--team"}, []string{"--yes"})
+	if help || err != nil {
+		return err
+	}
+	id := first(v["--team"])
+	if id == "" {
+		return a.fail(L("down 必须指定 --team <id>"))
+	}
+	if !a.st.exists(id) {
+		return a.fail(L("编组不存在：%s"), id)
+	}
+	// 锁序 anchor → team；状态读不出来就拿不到锚点，只取 team 锁。
+	t, _ := a.st.load(id)
+	if t != nil {
+		if err := a.lock("anchor-"+t.Anchor.PaneID, "down"); err != nil {
+			return err
+		}
+	}
+	if err := a.lock("team-"+id, "down"); err != nil {
+		return err
+	}
+	if t, _ = a.st.load(id); t == nil {
+		a.warnf(L("编组 %s 的状态文件无法解析，按原样归档。"), id)
+	}
+	if _, yes := v["--yes"]; !yes {
+		if !stdinIsTTY() {
+			return a.fail(L("非交互环境需要 --yes 确认；未解散。"))
+		}
+		a.outf(L("将解散编组 %s：状态归档，不关闭 pane、不通知成员；之后不能再 init / send / rebind。确认？[y/N] "), id)
+		ans, err := a.readLine()
+		if l := strings.ToLower(ans); err != nil || (l != "y" && l != "yes") {
+			a.outf("%s", L("已取消。\n"))
+			return nil
+		}
+	}
+	dest := filepath.Join(a.st.archiveDir(), safeName(id)+".json")
+	if _, err := os.Lstat(dest); err == nil {
+		return a.fail(L("归档位置已存在：%s；请人工核对。"), dest)
+	}
+	if err := mkdirSecure(a.st.archiveDir()); err != nil {
+		return a.fail(L("归档失败：%v"), err)
+	}
+	if err := os.Rename(a.st.file(id), dest); err != nil {
+		return a.fail(L("归档失败：%v"), err)
+	}
+	a.outf(L("编组 %s 已解散，状态归档到 %s。\n"), id, dest)
+	if t == nil {
+		return nil
+	}
+	for _, key := range t.members() {
+		a.outf(L("  %s（%s）的 pane %s 未关闭，请自行处理。\n"), key, t.role(key).Name, t.role(key).Pane)
+	}
+	if t.TaskDir != "" && t.TaskDir == taskDirFor(t) && realDir(t.TaskDir) {
+		// 非递归删除：只有空目录才会被删掉。
+		if os.Remove(t.TaskDir) != nil {
+			a.outf(L("任务目录保留：%s（不再需要时请自行删除）。\n"), t.TaskDir)
+		}
 	}
 	return nil
 }

@@ -64,6 +64,7 @@ File: `config.json`. **Never commit real providers / paths / credentials.**
 
 - **Language**: CLI output and agent prompts follow `NAKAMA_LANG=en|zh|ja`, otherwise `LC_ALL` / `LC_MESSAGES` / `LANG` (`zh*`, `ja*`), otherwise English. The variable is read by the plugin process, so set it in the environment Herdr is started from. Use the same language for `up` and `init`: prompts differ per language, so switching in between is refused as a protocol hash drift.
 - Precedence: CLI > `default_profile` > built-in neutral defaults (missing config is an error; no personal provider is built in).
+- **`auto_init`**: with `default_profile.auto_init: true`, `up` (for a newly created team) and `add` / `swap` run `init` right after the launch succeeds, releasing their locks first. It is off by default: the two-step flow exists so that you can check each pane's model and permissions before any prompt is sent. A half-built team resumed with `up` is not initialized automatically.
 - Engine syntax: `<launcher>/<model>[:effort]`, or an `engine_map` shorthand.
 - `cc` without a model defaults to `claude-opus-5-5` + `medium` (i.e. `cc --model claude-opus-5-5 --effort medium`); with a model but no effort, `--effort` is omitted and Claude's own default applies.
 - **provider**: the provider for `pi` roles comes from `default_profile.pi_provider` (private, never commit); if missing, `up` refuses before any split.
@@ -94,6 +95,10 @@ nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
+nakama send --team <id> --task <task_id> --to <member key> --title <title> --file <body file> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <member key>]
+nakama send --team <id> --resend <req> [--to <member key>] [--from <member key>]
+nakama down --team <id> [--yes]
+nakama resolve --team <id> --delivered | --not-delivered
 ```
 
 - New team names: `<project short name ≤8>_<12hex>`, or `task_` when no project matches. The suffix mixes a nanosecond timestamp with 6 bytes of cryptographic randomness and takes the first 6 bytes of its SHA-256, keeping a fixed format that external tools can recognize. Role names are `<prefix>_design/_execute/_advisor`, full name ≤32; existing teams keep their names.
@@ -108,6 +113,7 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 After a team is initialized you can add, remove or replace Workers / Advisors, including a stuck one. The Owner cannot be replaced. A team holds one Owner, 1–4 Workers and 0–4 Advisors (default: 1 Worker, plus 1 Advisor when the Advisor engine is not `none`, otherwise no Advisor); these limits apply to members at the same time, not to instance numbers. When a kind has more than one member, `swap` and `drop` require `--instance N`. New panes are always split inside the anchor's own tab; if that cannot be verified the operation stops, and no tab or window is created.
 
 - **Entry point**: press `prefix+u` in the anchor or any role pane; for an existing team it shows a management menu (`a` add an Advisor, `n` add a Worker, `x` remove an Advisor, `r` remove a Worker (never the last one), `v` replace an Advisor, `w` replace a Worker, `c` clean task directories; when a kind has several members you type a member key such as `W2`, while the CLI `--instance` takes the number, e.g. `2`). Pick the engine and confirm. The CLI equivalents are `nakama add / drop / swap --team <id>`.
+- **Rebind and disband**: the same menu shows `b` (rebind) only when the anchor or a member looks like a restart candidate or a rebind plan is unfinished, and always shows `d` (disband). See "Restoring teams after a computer or Herdr restart" and "Disbanding a team".
 - **Two steps**: `add` / `swap` only create the pane and launch the new instance. After checking its model and permissions, press `prefix+i`: `init` initializes the new role, then delivers one `[TEAM_UPDATE]` (the latest mapping plus that role's new division of work) to each other role on the team. `drop` has no new instance and delivers right away.
 - **Only idle roles are notified**: `[TEAM_UPDATE]` goes only to roles whose identity verifies and that are idle/done. A busy or dialog-blocked role keeps a pending flag (`status` shows `team_update=pending`); press `prefix+i` again once it is idle.
 - **Old instances**: a replaced or removed instance is recorded under `retired` in the state. Its pane is not closed or renamed and receives no further input from the plugin. Before replacing a Worker, make sure the old one has stopped writing, then deal with that pane yourself.
@@ -119,11 +125,41 @@ After a team is initialized you can add, remove or replace Workers / Advisors, i
 
 A newly created team has a task directory `<project dir>/.nakama/<team id>/`; its path is recorded in the state and written into every role's init prompt. `.nakama/.gitignore` contains `*`, so the whole directory stays out of `git status` and diffs.
 
-- **Purpose**: the Owner creates a `<task_id>/` subdirectory per business task; handoff packages, NOTICEs and the Advisor's conclusions are each written as one file (for example `op_x_h1.md`, `W1-003.md`, `A1-002.md`) and never modified afterwards. Prompts between roles carry only the message header and the file path; writing a file is not delivery, the NOTICE must still be sent. A role that joins or is replaced mid-task reads the latest handoff from here. See the [shared protocol](../prompts/en/protocol.md) for the rules.
+- **Purpose**: every message between members is one file here. `nakama send` creates the `<task_id>/` subdirectory on first use and writes each message as `<member key>-<sequence>.md` (for example `O1-000.md`, `W1-003.md`) — the message header and correlation fields first, then the full body — plus a `ledger.jsonl` that records every delivery attempt. Message files are never modified afterwards. A role that joins or is replaced mid-task reads the latest handoff from here. See "Messages between members" and the [shared protocol](../prompts/en/protocol.md).
 - **No automatic cleanup**: finishing a task is not authorization to delete. The Owner reports the directory path once at delivery, and runs the cleanup command given in its prompt only after you explicitly say it may be deleted.
 - **Cleaning it yourself**: `c` in the management menu, or `nakama clean`. Without a selection it lists every task directory (file count, size, last modified) and, in a terminal, lets you pick by number and confirm; `--team <id> --task <task_id>` or `--all` select directly, and a non-interactive run needs `--yes`.
 - **Safeguards**: only direct subdirectories of the task directory recorded in the state are deleted, and symlinks are not followed; while that team's Worker or Advisor (including replaced instances) is working/blocked, or its state cannot be confirmed, it refuses by default, and deletes only with `--force`. Whether requests are settled is judged by the Owner under the protocol; the plugin cannot know.
 - **Older teams**: teams created before this version have no task directory and keep inlining message bodies.
+
+## Messages between members
+
+Roles deliver every business message with `nakama send` instead of a hand-written `herdr agent prompt`; the exact command line, with the state directory and team id filled in, is part of each role's init prompt.
+
+- **What one send does**: it allocates the request number `<task_id>/<member key>-<sequence>` from the files already in the task directory, writes the message file, verifies the recipient's frozen identity, and delivers a prompt that holds only the header, the correlation fields and `file=<path>`. `--reply sync` waits up to 120 seconds and then prints the recipient's latest output.
+- **When the recipient is not available**: only an idle/done recipient receives input. A working recipient is waited on once for at most 60 seconds; if it is still working, blocked or unknown, or its identity drifted, nothing is sent, the command prints `delivery=NOT_SENT` and exits non-zero. The message and its number stay on disk, and `--resend <req>` delivers the same message later.
+- **Delivery states**: `SENT`; `NOT_SENT`; `UNKNOWN` (the prompt command failed in a way that cannot prove whether the input arrived — check with `herdr agent read` before resending); and `SYNC` (`--no-deliver`: a synchronous answer that is recorded but not prompted back). A delivery is recorded as `UNKNOWN` before the prompt is sent, so a killed process never leaves a possibly delivered message marked as unsent.
+- **Relays**: `--resend <req> --to <member>` run by a member other than the author forwards the message unchanged and adds `relayed_by` to the header.
+- **Sender**: the member whose pane is `HERDR_PANE_ID`. `--from` is only needed where that variable is missing, and must agree with it otherwise.
+- **`status`**: for each task that has a ledger it prints the message count and the open items — requests with no `DONE` answer yet (`WAITING`, `BLOCKED`, `PAUSED`) and messages whose last delivery is `NOT_SENT` or `UNKNOWN`. The view is derived from the ledger; whether a request is settled is still decided by the roles under the protocol.
+- **No lock**: `send` only reads team state and does not take the team lock. Request numbers are allocated with an exclusive hard link, so an interrupted `send` cannot leave a stale lock that blocks the team.
+- **Without a task directory** (the `.nakama` path is a symlink): `send` refuses, and roles fall back to inlining bodies as the protocol describes.
+
+## Disbanding a team
+
+`nakama down --team <id>` (or `d` in the management menu) moves the team's state file to `$HERDR_PLUGIN_STATE_DIR/archive/<id>.json`. The anchor pane can then host a new team, and `init` / `send` / `rebind` / `status` no longer see the old one.
+
+- No pane is closed or renamed and no input is sent to any member; the command lists the member panes for you to deal with.
+- An empty task directory is removed; one that holds messages is kept and its path is printed.
+- It asks for confirmation, and a non-interactive run needs `--yes`. `--team` is required and is never inferred from the pane.
+- It also works when the state file no longer passes validation — the case that would otherwise keep the anchor occupied.
+
+## Settling an unconfirmed delivery
+
+When `init` or a `[TEAM_UPDATE]` ends with an unknown result (for example `agent_prompt_stalled`), the team stops and nothing is resent. Look at the pane, then tell the plugin what you saw: `nakama resolve --team <id> --delivered` records the role as initialized (after verifying its identity again) or the update as delivered; `--not-delivered` clears the mark so that the next `init` sends it again. `status` prints this hint whenever it applies.
+
+- It covers the `prompt`, `team_update` and `rename` steps only. An unknown `split` or launch involves pane and process ownership and is not guessed at: disband with `down` and create a new team.
+- `--not-delivered` is refused when a role recorded with an empty session now reports one: Codex creates its session on the first input, so that is evidence the prompt arrived.
+- A failed identity capture after launch needs no `resolve`: capture is read-only, so the next `up` / `init` simply tries it again, and `up` then launches the members that were not started yet.
 
 ## State and safety
 
@@ -153,6 +189,8 @@ Task names may be cleared, or auto-renamed by an external tool (Bridge) to `<pro
    - `--confirm-anchor` is only for shell anchors without an identity; the value must equal the new terminal observed now.
    - Roles with a non-empty recorded session accept no confirmation override: the observation must equal the record.
 3. If no rebind is needed (identity and names already match), it prints `no rebind needed` and writes no state; repeated runs are a full no-op, without incrementing `team_rev` or adding audit entries.
+
+**From the management menu.** `b` appears when the team looks like a restart candidate. It prints the same preflight, lists the values that need explicit confirmation, and after you confirm runs `rebind` with exactly those values; `rebind` observes again and refuses if they no longer match.
 
 **Refusal conditions (always zero renames, zero state writes).** The team is not `initialized`, has a pending operation, or any role is stale or uninitialized; a pane is unreadable;
 a pane's workspace/tab/cwd differs from the record; kind changed; the observed session is empty or differs from the record; the task name is neither empty nor the exact Bridge auto-name (possibly taken by someone else);
@@ -185,6 +223,8 @@ without marking stale or writing state. `status` is read-only, observes by recor
 
 `prompts/<lang>/{protocol,owner,worker,advisor}.md` are the single source of truth for the shared protocol and role prompts and are read at runtime; `protocol_version` is the sha256 of the selected language's `protocol.md`. The Chinese text is the original; English and Japanese are translations that must keep the same `<!-- … -->` markers (checked by tests). Downstream projects reusing these templates should sync from this directory and verify the source version themselves. Authorization for manual Skills is written in the project context file or the request; the protocol itself ships no Skill allowlist.
 
+In `protocol.md`, the lines between `<!-- role:owner,worker -->` and `<!-- /role -->` are sent only to the listed roles; everything else goes to every role. `protocol_version` remains the sha256 of the whole file.
+
 For architecture tasks, the `architecture` Skill (user-defined, not provided by the plugin) is read per role when installed; otherwise the original handoff contract continues and the gap is noted. The plugin does not install Skills, change role division or spawn teams. Template changes do not refresh existing role contexts; old teams that have not finished initialization remain protected by the original protocol-hash drift check, which is never bypassed by clearing state.
 
 When the user asks any role to compact its context, the automatic compaction branch of an installed [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill (a user-defined compaction Skill, not bundled with the plugin) is used; this plugin only keeps the rules connecting it to existing duties, pause/resume authorization and request state. Background control targets only the caller's own session; when not installed or unsupported by the control plane, recovery information is kept and the gap reported.
@@ -207,6 +247,10 @@ The fixtures `tests/fixtures/agent_get.json` / `pane_get_shell.json` come from r
 - The Herdr server namespace cannot be proven directly from the CLI; anchor evidence uses `terminal_id` continuity from `pane get` (compared at init / for existing teams) instead, and this page documents that boundary.
 - There is an unavoidable race window between `rebind` renames and Bridge auto-naming (see "Restoring teams after a computer or Herdr restart"); on drift it stops and keeps the plan.
 - `rebind`'s Herdr calls are only verified with the fake herdr harness; the return of `agent rename` and the argument passing of `plugin action invoke` on real Herdr 0.9.3 were not sampled in this version.
+- `send` and `down` were run end to end on real Herdr 0.9.5 with Claude Code, Codex, Pi and Qoder members: each engine received a handoff, did the work and reported back by running `send` itself; also covered were the bounded wait on a working recipient followed by `NOT_SENT`, `--resend`, synchronous requests answered with `--no-deliver`, and 30 concurrent sends. Not sampled on real Herdr: rebind from the menu and the timing of `auto_init` right after launch.
+- Everything the plugin knows about a member's state comes from Herdr's status detection. Qoder CLI 1.1.89 matches no rule in Herdr's detection manifest and is always reported `idle`, so a working Qoder still receives prompts, and `--reply sync` or `init` can end with `agent_prompt_stalled` although the prompt arrived (use `resolve`). Codex was once reported idle in the middle of a turn; `send` therefore requires two consecutive idle observations, which narrows that window but cannot close it.
+- Startup dialogs that Herdr reports as idle swallow input. `init` refuses when the pane shows a dialog footer of the form `enter … · esc …` (seen on Codex: folder trust, hook review, and one more); this is a text match against the screen, so other dialogs — Qoder's folder trust keeps no distinguishable footer — are not caught. A Codex instance that was still starting has also accepted an init prompt without answering it.
+- `send` checks the recipient's status and then prompts; two senders that both see the same recipient idle can both deliver, and the second prompt arrives while the recipient is already working. Herdr offers no compare-and-send, so receivers still rely on the protocol's rule of advancing each req only once.
 - The first freeze of manual launchers (pi/cc/ccenv) requires "terminal_id recorded at split == terminal_id from the first agent get" + "kind equals the expected kind" + "the instance is not named by someone else"; if any fails it stops with UNKNOWN. The only name compatibility is the exact external Bridge auto-name (project directory slug + first 4 hex of SHA-256 of terminal_id): it may be replaced by the role name while the full launch fingerprint still matches; other names, missing launch fingerprints or fingerprint drift are still refused. Timestamps distinguish creation batches; this compatibility keeps auto-naming from blocking init.
 - Rebuilding a half-built team only launches when the pane occupancy is `idle` (confirmed `agent_not_found`); `occupied` and `unknown` (get failed / incomplete object) both terminate non-zero before launch.
 - The response structure of `agent start` was not sampled and is not relied on for capture; native identity always uses a bounded `agent get`.
