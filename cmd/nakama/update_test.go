@@ -235,3 +235,34 @@ func TestUntarRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("不应留下截断文件：%q", b)
 	}
 }
+
+func TestUpdateDoesNotFollowDirSymlinkOrHideProtocolChange(t *testing.T) {
+	e := newEnv(t)
+	root := pkgRoot(t, e, "0.0.4")
+	releaseServer(t, "v0.0.9", append([]byte{}, makePkg(t, []tarEntry{
+		{name: "nakama/herdr-plugin.toml", body: "id = \"x\"\nversion = \"0.0.9\"\n"},
+		{name: "nakama/bin/nakama", body: "new"},
+		{name: "nakama/prompts/zh/protocol.md", body: "new protocol\n"},
+		{name: "nakama/zzz", body: "z"},
+	})...), "")
+
+	// 协议换入之后才失败（zzz 的位置是非空目录）：失败出口也要提示协议变化。
+	os.MkdirAll(filepath.Join(root, "zzz", "x"), 0o755)
+	ok, out := runAt(root, "", "update", "--yes")
+	eq(t, ok, false, "失败")
+	has(t, out, "共享协议有变化", "失败时也提示重建编组")
+	os.RemoveAll(filepath.Join(root, "zzz"))
+
+	// prompts/zh 是指向插件根之外的链接：拒绝，外部文件不变。
+	outside := filepath.Join(e.root, "outside")
+	os.MkdirAll(outside, 0o755)
+	os.WriteFile(filepath.Join(outside, "protocol.md"), []byte("external\n"), 0o644)
+	os.RemoveAll(filepath.Join(root, "prompts", "zh"))
+	os.Symlink(outside, filepath.Join(root, "prompts", "zh"))
+	ok, out = runAt(root, "", "update", "--yes")
+	eq(t, ok, false, "拒绝")
+	has(t, out, "not a real directory", "原因")
+	b, _ := os.ReadFile(filepath.Join(outside, "protocol.md"))
+	eq(t, string(b), "external\n", "外部文件未被替换")
+	eq(t, (&app{root: root}).localVersion(), "0.0.4", "清单未换")
+}

@@ -276,19 +276,25 @@ func (a *app) cmdUpdate(args []string) error {
 		case err != nil || rel == "." || rel == manifest:
 			return err
 		case d.IsDir():
-			return os.MkdirAll(filepath.Join(a.root, rel), 0o755)
+			// 已存在的目标必须是真实目录：跟随符号链接会把文件换到插件根之外。
+			dest := filepath.Join(a.root, rel)
+			if _, err := os.Lstat(dest); err == nil && !realDir(dest) {
+				return fmt.Errorf("%s is not a real directory", dest)
+			}
+			return os.MkdirAll(dest, 0o755)
 		}
 		return os.Rename(p, filepath.Join(a.root, rel))
 	})
 	if err == nil {
 		err = os.Rename(filepath.Join(stage, manifest), filepath.Join(a.root, manifest))
 	}
+	// 失败出口也要提示：协议可能已经换入，重跑时新旧摘要相同，就不会再提示了。
+	if newProto, _ := a.protocolSha(); newProto != oldProto {
+		a.outf("%s", L("共享协议有变化：升级前创建的编组在 init / add / swap 时会被拒绝，需要重建。\n"))
+	}
 	if err != nil {
 		return a.fail(L("升级失败：%v"), err)
 	}
 	a.outf(L("已升级到 %s。运行 herdr server reload-config 让 Herdr 读取新的插件清单。\n"), tag)
-	if newProto, _ := a.protocolSha(); newProto != oldProto {
-		a.outf("%s", L("共享协议有变化：升级前创建的编组在 init / add / swap 时会被拒绝，需要重建。\n"))
-	}
 	return nil
 }
