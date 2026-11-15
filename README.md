@@ -152,9 +152,13 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <member key> --title <title> --file <body file> [...]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
+nakama version [--check]
+nakama update [--check] [--yes]
 ```
 
 ## Upgrading
+
+Check what you have and what is available with `herdr plugin action invoke version --plugin forsakesoul.nakama`, and upgrade with the `update` action (or `bin/nakama update` in the plugin directory). How it upgrades depends on how you installed: a GitHub install is handed to `herdr plugin update`; a linked release package is downloaded, checked against `SHA256SUMS` and replaced in place; a source checkout is left alone and you are told to `git pull` and rebuild. Run `herdr server reload-config` afterwards.
 
 Teams created before an upgrade keep working as conversations. If the new version changes the shared protocol, initializing those teams or adding and replacing their members is refused; create a new team instead.
 

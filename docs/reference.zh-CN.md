@@ -19,7 +19,7 @@
 ## 目录
 
 ```
-herdr-plugin.toml       manifest（actions: up / init / status / rebind / pick；pane: picker；add / drop / swap / clean 经管理菜单或命令行使用）
+herdr-plugin.toml       manifest（actions: up / init / status / rebind / version / update / pick；pane: picker；add / drop / swap / clean 经管理菜单或命令行使用）
 cmd/nakama/      实现（package main：config / engine / state / lock / identity / prompts / team …）
 bin/nakama       构建产物（不入库，见下）
 prompts/{en,zh,ja}/      各语言的 protocol.md + owner.md / worker.md / advisor.md
@@ -99,8 +99,11 @@ nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --fil
 nakama send --team <id> --resend <req> [--to <成员键>] [--from <成员键>]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
+nakama version [--check]
+nakama update [--check] [--yes]
 ```
 
+- **`version` / `update`**：`version` 输出插件根目录 `herdr-plugin.toml` 里的 `version`，不联网；加 `--check` 才查询最新发布。`update` 先向 Herdr 查询安装方式：从 GitHub 安装的执行 `herdr plugin update`；源码检出（插件根有 `.git`）拒绝并给出应执行的命令；link 的发布包则下载本机架构的安装包，按该发布的 `SHA256SUMS` 校验（只保证完整性，不是签名），解到插件根旁边后逐项换入，不属于安装包的文件保留。非交互环境需要 `--yes`；共享协议有变化时会提示；只升级、不降级。两者也都是插件 action（`version`、`update`）。
 - 新组命名：`<项目短名 ≤8>_<12hex>`，未匹配时使用 `task_`；后缀由纳秒时间戳与 6 字节密码学随机数混合，经 SHA-256 取前 6 字节生成，保持外部工具可识别的固定格式。角色名 `<prefix>_design/_execute/_advisor`，全名 ≤32；已有组继续沿用原名。
 - 锚点 pane/cwd 取自注入上下文（`HERDR_PLUGIN_CONTEXT_JSON` / `HERDR_PANE_ID`），并用 `herdr pane get/current` 只读核对；**不以插件根 `$PWD` 当项目目录**，无法确定则拒绝。
 - 所有 Herdr 调用走 `HERDR_BIN_PATH`（缺省 `herdr`），argv 逐参数，不 eval、不拼 shell。

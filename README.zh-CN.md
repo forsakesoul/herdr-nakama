@@ -152,9 +152,13 @@ nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [...]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
+nakama version [--check]
+nakama update [--check] [--yes]
 ```
 
 ## 升级
+
+用 `herdr plugin action invoke version --plugin forsakesoul.nakama` 查看当前版本和最新发布，用 `update` action（或在插件目录执行 `bin/nakama update`）升级。升级方式取决于安装方式：从 GitHub 安装的交给 `herdr plugin update`；link 的发布包会下载新包、按 `SHA256SUMS` 校验后原地替换；源码检出不会被改动，只提示你 `git pull` 后重新构建。升级后执行 `herdr server reload-config`。
 
 升级插件后，之前创建的编组可以继续对话。如果新版本修改了共享协议，对旧编组执行初始化、添加或替换成员会被拒绝，需要重新建组。
 

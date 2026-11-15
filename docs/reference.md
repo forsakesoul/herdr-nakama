@@ -19,7 +19,7 @@ Press `prefix+u` in the target pane to open the engine picker (overlay): choose 
 ## Layout
 
 ```
-herdr-plugin.toml       manifest (actions: up / init / status / rebind / pick; pane: picker)
+herdr-plugin.toml       manifest (actions: up / init / status / rebind / version / update / pick; pane: picker)
 cmd/nakama/      implementation (package main: config / engine / state / lock / identity / prompts / team …)
 bin/nakama       build output (not committed, see below)
 prompts/{en,zh,ja}/      protocol.md + owner.md / worker.md / advisor.md per language
@@ -99,8 +99,11 @@ nakama send --team <id> --task <task_id> --to <member key> --title <title> --fil
 nakama send --team <id> --resend <req> [--to <member key>] [--from <member key>]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
+nakama version [--check]
+nakama update [--check] [--yes]
 ```
 
+- **`version` / `update`**: `version` prints the `version` of the `herdr-plugin.toml` in the plugin root and makes no network request; `--check` also resolves the latest release. `update` asks Herdr how the plugin was installed: a GitHub install runs `herdr plugin update`; a source checkout (a `.git` in the plugin root) is refused with the commands to run; a linked release package is downloaded for this machine's architecture, verified against the release's `SHA256SUMS` (integrity, not a signature), unpacked next to the plugin root and swapped in entry by entry — files that are not part of the package stay. It needs `--yes` when not interactive, reports when the shared protocol changed, and only upgrades, never downgrades. Both are also plugin actions (`version`, `update`).
 - New team names: `<project short name ≤8>_<12hex>`, or `task_` when no project matches. The suffix mixes a nanosecond timestamp with 6 bytes of cryptographic randomness and takes the first 6 bytes of its SHA-256, keeping a fixed format that external tools can recognize. Role names are `<prefix>_design/_execute/_advisor`, full name ≤32; existing teams keep their names.
 - The anchor pane/cwd come from the injected context (`HERDR_PLUGIN_CONTEXT_JSON` / `HERDR_PANE_ID`) and are verified read-only with `herdr pane get/current`; **the plugin root `$PWD` is never used as the project directory** — if it cannot be determined, it refuses.
 - Every Herdr call goes through `HERDR_BIN_PATH` (default `herdr`) with argv passed per argument — no eval, no shell concatenation.
