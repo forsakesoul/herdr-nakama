@@ -284,6 +284,16 @@ func fakeHerdr(args []string) {
 		if code := os.Getenv("FAKE_PROMPT_ERROR"); code != "" {
 			errOut(code)
 		}
+		// codex：首条输入送达后才有 session。
+		if os.Getenv("NAKAMA_FAKE_SESSION_ON_PROMPT") != "" {
+			rows := readRows(names)
+			for i := range rows {
+				if rows[i].key == get(2) && rows[i].sess == "" {
+					rows[i].sess = "sess-" + rows[i].key
+				}
+			}
+			writeRows(names, rows)
+		}
 		fmt.Println(`{"result":{"ok":true}}`)
 	case "plugin update":
 		if os.Getenv("FAKE_PLUGIN_UPDATE_FAIL") != "" {
