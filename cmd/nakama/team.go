@@ -942,6 +942,15 @@ func (a *app) initRole(t *Team, rn string) int {
 		}
 		return 2
 	}
+	// codex 收到首条输入后才上报 session：趁还持有编组锁把它固定为身份基准。
+	// send / rules 不取锁、不写状态，留空的话之后任何会话都能补全通过核验。
+	if r.Identity.Session == "" {
+		if o, ok := a.agentGet(string(r.Pane)); ok {
+			if filled, ok := fillSession(*r.Identity, o.ident()); ok {
+				r.Identity = &filled
+			}
+		}
+	}
 	r.Inited = true
 	t.Pending = nil
 	if a.save(t) != nil {

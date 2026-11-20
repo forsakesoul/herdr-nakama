@@ -546,3 +546,24 @@ func TestNoneTeamOmitsSnapshotRules(t *testing.T) {
 	hasNot(t, e.lastPrompt(id+"_design"), "并行放行", "none 编组 owner 无并行规则")
 	hasNot(t, e.lastPrompt(id+"_execute"), "交接包要求快照时", "none 编组 worker 无快照生成规则")
 }
+
+// codex 的 session 在初始化提示送达后才出现：init 须把它固定为身份基准，之后换了会话的同一 pane 不能再发消息或读规则。
+func TestInitPinsSessionThatArrivesWithFirstPrompt(t *testing.T) {
+	t.Setenv("NAKAMA_FAKE_SESSION_ON_PROMPT", "1")
+	e := newEnv(t)
+	e.config("codex")
+	e.mustRun("up")
+	id := e.teamID()
+	eq(t, e.str("roles", "W1", "identity", "session"), "", "测试前提：冻结时 session 为空")
+	e.mustRun("init", "--team", id)
+	name := e.str("roles", "W1", "name")
+	eq(t, e.str("roles", "W1", "identity", "session"), "sess-"+name, "init 固定首次出现的 session")
+
+	body := filepath.Join(e.root, "draft.md")
+	os.WriteFile(body, []byte("正文\n"), 0o644)
+	send := []string{"send", "--team", id, "--from", "W1", "--task", "op_x", "--to", "O1", "--title", "t", "--file", body}
+	e.mustRun(send...)
+	e.rowSet(name, e.str("roles", "W1", "pane"), e.str("roles", "W1", "identity", "terminal_id"), "codex", "sess-other")
+	e.mustFail(send...)
+	e.mustFail("rules", "--team", id, "--from", "W1")
+}
