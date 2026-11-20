@@ -237,7 +237,7 @@ func (a *app) buildPrompt(t *Team, key string, initial bool) (string, error) {
 }
 
 // rules：只读重读本角色规则（压缩或会话恢复后用）。调用者须是在册且身份核验通过的成员；
-// 版本漂移或上下文不可读时整体失败，stdout 不输出半份规则；不写状态、不投递 prompt。
+// 版本漂移或上下文不可读时整体失败，stdout 不输出半份规则；成员尚未初始化时只提示无需运行并以 0 退出；不写状态、不投递 prompt。
 func (a *app) cmdRules(args []string) error {
 	v, help, err := a.parseArgs(args, L("用法：nakama rules --team <id> [--from <成员键>]\n"), []string{"--team", "--from"}, nil)
 	if help || err != nil {
@@ -250,6 +250,13 @@ func (a *app) cmdRules(args []string) error {
 	t, err := a.st.load(id)
 	if err != nil {
 		return a.fail("%v", err)
+	}
+	// 初始化那一轮成员常会照映射里的规则命令试跑：身份尚未冻结所以不输出规则，但这不是故障，不以非零退出引出误报。
+	if key, err := a.senderKey(t, first(v["--from"])); err != nil {
+		return err
+	} else if !t.role(key).Inited {
+		fmt.Fprintln(a.stderr, L("初始化尚未完成：初始化提示已含完整规则，现在无需运行本命令，也无需报告。"))
+		return nil
 	}
 	from, err := a.verifiedSender(t, first(v["--from"]))
 	if err != nil {

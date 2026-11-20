@@ -160,22 +160,32 @@ func TestProtocolIsScopedByRole(t *testing.T) {
 	has(t, advisor, "仅当本任务已有用户明确的自动压缩授权", "advisor 收自行压缩句")
 	// h5：快照定义三角色可见；调度（S_A/S_AB）只给 Owner，写保护与预热只读例外给 Worker，快照审查来源给 Advisor。
 	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
-		has(t, p, "审查快照（所有角色共用定义）", name+" 收快照定义")
+		hasNot(t, p, "审查快照（所有角色共用定义）", name+" 协议不再定义快照")
+		hasNot(t, p, "git archive", name+" 无只读副本要求")
 	}
-	has(t, owner, "S_AB", "owner 收并行与修复调度")
+	has(t, owner, "并行放行", "owner 收并行放行规则")
+	has(t, owner, "写全快照内容与含义", "owner 收快照内容要求")
+	has(t, owner, "git diff --binary --full-index <base> -- <在审路径>", "owner 收哈希契约命令")
+	has(t, worker, "交接包要求快照时", "worker 收快照仅按交接要求生成")
+	has(t, worker, "同一条命令与路径集合", "worker 收同一命令契约")
+	has(t, advisor, "默认审查 Owner 指定基线到当前的 live diff", "advisor 收默认审查来源")
+	hasNot(t, worker, "并行放行", "worker 不收 Owner 并行规则")
+	hasNot(t, advisor, "并行放行", "advisor 不收 Owner 并行规则")
 	hasNot(t, worker, "S_AB", "worker 不收 Owner 调度")
 	hasNot(t, advisor, "S_AB", "advisor 不收 Owner 调度")
-	has(t, worker, "在审快照的改动路径禁止写", "worker 收写保护")
+	has(t, worker, "审查针对的改动路径在审查期间禁止写", "worker 收写保护")
 	has(t, worker, "只读预热", "worker 收只读预热例外")
 	has(t, owner, "只读预热请求", "owner 收预热派发")
-	has(t, advisor, "不可变快照", "advisor 收快照审查来源")
+	has(t, advisor, "默认审查 Owner 指定基线到当前的 live diff", "advisor 收快照审查来源")
+	has(t, advisor, "同一条命令（同一 base、同参数、同路径集合）", "advisor 收前后同命令比对")
+	has(t, advisor, "git ls-files --others --exclude-standard", "advisor 收 untracked 清单比对")
 	// h6：预热回报不要求 handoff、快照仅按交接包要求生成；全局通过点要求全部累计差异。
 	for name, p := range map[string]string{"owner": owner, "worker": worker} {
 		has(t, p, "只读预热的回报按原 req 回 DONE/BLOCKED", name+" 收预热回报规则")
 	}
 	hasNot(t, advisor, "只读预热的回报按原 req 回 DONE/BLOCKED", "advisor 不收 Worker 回报条")
-	has(t, worker, "若 Owner 在交接包要求阶段或最终快照审查", "worker 快照仅按交接要求生成")
-	has(t, owner, "仅当快照截至该点的全部累计差异都已审通过时才推进全局点", "owner 全局通过点条件")
+	hasNot(t, worker, "若 Owner 在交接包要求阶段或最终快照审查", "worker 旧快照句已删除")
+	has(t, owner, "只有截至某点的全部累计差异都已审过，才推进全局通过点", "owner 全局通过点条件")
 	// 规则重读失败停点在恢复信息（所有角色可见），不只在 Owner/Worker 的职责保全里。
 	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
 		has(t, p, "规则重读失败则停在只读补证", name+" 收规则重读失败停点")
@@ -462,7 +472,7 @@ func TestRulesRejectsDriftWithoutPartialOutput(t *testing.T) {
 	e.stateSet(func(m map[string]any) { m["protocol_version"] = "sha256:stale" })
 	before, _ := os.ReadFile(e.stateFile())
 	out := e.mustFail("rules", "--team", id, "--from", "W1")
-	has(t, out, "当前编组的规则与已安装插件不一致", "协议漂移被拒绝")
+	has(t, out, "编组的规则与已安装插件或上下文文件不一致或不可读", "协议漂移被拒绝")
 	hasNot(t, out, "你的角色：Worker", "不输出半份规则")
 	after, _ := os.ReadFile(e.stateFile())
 	eq(t, string(after), string(before), "不写状态")
@@ -528,4 +538,11 @@ func TestDeliveryPromptCarriesRulesCommand(t *testing.T) {
 	}
 	e.mustRun("send", "--team", id, "--from", "O1", "--resend", "op_x/O1-000")
 	has(t, e.lastPrompt(worker), " rules --team "+id, "resend 的投递 prompt 同样带规则命令行")
+}
+
+// none 编组（无独立 Advisor）：owner 不含并行与快照规则。
+func TestNoneTeamOmitsSnapshotRules(t *testing.T) {
+	e, id, _ := sendSetup(t, false)
+	hasNot(t, e.lastPrompt(id+"_design"), "并行放行", "none 编组 owner 无并行规则")
+	hasNot(t, e.lastPrompt(id+"_execute"), "交接包要求快照时", "none 编组 worker 无快照生成规则")
 }

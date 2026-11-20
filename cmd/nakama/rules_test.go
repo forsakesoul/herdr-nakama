@@ -124,7 +124,7 @@ func TestRulesRejectionsLeaveNoTrace(t *testing.T) {
 		{"protocol 漂移", func(e *tenv, id string) ([]string, map[string]string) {
 			e.stateSet(func(m map[string]any) { m["protocol_version"] = "sha256:stale" })
 			return []string{"rules", "--team", id, "--from", "W1"}, nil
-		}, "当前编组的规则与已安装插件不一致"},
+		}, "编组的规则与已安装插件或上下文文件不一致或不可读"},
 		{"context hash 漂移", func(e *tenv, id string) ([]string, map[string]string) {
 			e.stateSet(func(m map[string]any) {
 				ctx, ok := m["context"].(map[string]any)
@@ -134,11 +134,11 @@ func TestRulesRejectionsLeaveNoTrace(t *testing.T) {
 				ctx["sha256"] = "stale"
 			})
 			return []string{"rules", "--team", id, "--from", "W1"}, nil
-		}, "当前编组的规则与已安装插件不一致"},
+		}, "编组的规则与已安装插件或上下文文件不一致或不可读"},
 		{"上下文文件缺失", func(e *tenv, id string) ([]string, map[string]string) {
 			os.Remove(e.ctx)
 			return []string{"rules", "--team", id, "--from", "W1"}, nil
-		}, "声明的上下文文件不可读"},
+		}, "编组的规则与已安装插件或上下文文件不一致或不可读"},
 		{"--from 与 pane 不一致", func(e *tenv, id string) ([]string, map[string]string) {
 			return []string{"rules", "--team", id, "--from", "W1"}, map[string]string{"HERDR_PANE_ID": e.str("roles", "O1", "pane")}
 		}, "与当前 pane 的成员"},
@@ -194,5 +194,32 @@ func TestInitDriftMessageUnchanged(t *testing.T) {
 	e, id, _ := sendSetup(t, false)
 	e.stateSet(func(m map[string]any) { m["protocol_version"] = "sha256:stale" })
 	has(t, e.mustFail("init", "--team", id), "protocol.md 已变化", "init 漂移文案不变")
-	hasNot(t, e.mustFail("init", "--team", id), "当前编组的规则与已安装插件不一致", "init 不用 rules 文案")
+	hasNot(t, e.mustFail("init", "--team", id), "编组的规则与已安装插件或上下文文件不一致或不可读", "init 不用 rules 文案")
+}
+
+// init 遇到上下文文件缺失：文案保持原样，不用 rules 专用文案。
+func TestInitMissingContextMessageUnchanged(t *testing.T) {
+	t.Setenv("NAKAMA_LANG", "zh")
+	e, id, _ := sendSetup(t, false)
+	os.Remove(e.ctx)
+	out := e.mustFail("init", "--team", id)
+	has(t, out, "声明的上下文文件不可读", "init 上下文缺失文案不变")
+	hasNot(t, out, "编组的规则与已安装插件或上下文文件不一致或不可读", "init 不用 rules 文案")
+}
+
+// 初始化完成前试跑 rules：不输出规则、不改状态，但以 0 退出并说明无需运行（真实建组时成员会照映射行试跑）。
+func TestRulesBeforeInitIsNotAnError(t *testing.T) {
+	t.Setenv("NAKAMA_LANG", "zh")
+	e, id, _ := sendSetup(t, true)
+	e.mustRun("add", "--team", id, "--role", "worker", "--engine", "cc")
+	before, _ := os.ReadFile(e.stateFile())
+	out, errOut, ok := runSplit(e, "rules", "--team", id, "--from", "W2")
+	if !ok {
+		t.Fatalf("未初始化不应算失败：%s", errOut)
+	}
+	eq(t, out, "", "stdout 为空")
+	has(t, errOut, "初始化提示已含完整规则", "说明无需运行")
+	hasNot(t, errOut, "ERROR", "不是错误")
+	after, _ := os.ReadFile(e.stateFile())
+	eq(t, string(after), string(before), "状态文件字节不变")
 }

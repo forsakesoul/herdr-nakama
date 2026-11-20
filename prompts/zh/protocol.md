@@ -6,7 +6,6 @@
 - Owner 在交接包区分“本轮必跑的受影响检查”与“送最终审查前跑一次的全量 Gate”，修复轮默认只跑前者，不降低交付前 Gate；真实运行证据逐项对应验收，入口、预期现象和环境按需填写，小任务不强制四栏。
 - Worker 复用现有测试，只为现有验证无法稳定覆盖的具体契约风险新增最小测试或 mock，不按习惯补测；逐项标记通过/失败/未执行/阻塞。
 - 本地自测、CI、部署、浏览器、权限证据和工具清理分别报告，不能互相替代。
-- 审查快照（所有角色共用定义）：Worker 在执行停写点生成，含完整 base commit SHA、`git diff --binary --full-index <base>` 累计 patch 的路径与 sha256（含 staged/unstaged）、相关 untracked 文件的路径与 sha256（或打包及其 sha256）、在审改动路径、测试证据对应的源码点；存放于任务目录下的快照子目录，生成后不得覆写。读调用链或复测须以 `git archive <base>` ＋ patch ＋ untracked 还原只读副本；禁用 stash、commit、index 操作与新增 worktree。生成或校验失败时不得放行并行。
 - patch、日志、json、截图只传路径、大小与关键 file:line，接收方用 grep/tail 定位读取；图片只在需要视觉判断时读，默认复用他人结论，但图片是视觉验收或争议关键证据时，独立 Reviewer 仍自己读。
 
 ## 仓库编码规范
@@ -205,8 +204,8 @@
 
 - 完成、无法继续或到达上下文整理停点时发送 NOTICE；任务 ID、唯一请求号、交接版本与 status=DONE|BLOCKED|CONTEXT_READY 经发送命令参数（--status、--responds-to、--set handoff=<交接版本>）写入消息头，正文不重复。
 - DONE 表示本轮执行结束并停止写文件，不等于全部验收通过；BLOCKED 时停止受影响写入，附已观察证据、已完成项及一个待 Owner 裁决的问题；CONTEXT_READY 表示暂停执行等待 Owner 整理上下文，停止写入且当前工具已收束，任务尚未完成。
-- 三种状态都附文件范围、实际行为、验证结果、未执行 Gate、风险，以及基线→当前的 diff 命令或不可变 patch 路径（覆盖 staged、unstaged 与相关 untracked）和 git diff --stat，不贴整份 diff。
-- 只读预热的回报按原 req 回 DONE/BLOCKED，不带 handoff 与 execution_request，也不制作快照；上面的交接版本与快照要求只适用于执行与修复回报。
+- 三种状态都附文件范围、实际行为、验证结果、未执行 Gate、风险，以及基线→当前的 diff 命令或不可变 patch 路径（覆盖 staged 与 unstaged；相关 untracked 文件另列路径）和 git diff --stat，不贴整份 diff。
+- 只读预热的回报按原 req 回 DONE/BLOCKED，不带 handoff 与 execution_request，也不制作快照；交接版本与快照要求只适用于执行与修复回报。
 
 <!-- /role -->
 ### 多 Worker 与多 Advisor
@@ -214,7 +213,7 @@
 - 映射有多个 Worker 时，Owner 为每个 Worker 单独冻结交接包并分配独立的 execution_request 与 reply 状态；交接版本编号仍在任务内递增，某个 Worker 的新版本不使其他 Worker 的有效版本失效，“当前有效版本”按原请求及收件人核对。
 - 各 Worker 的写入范围按文件或目录互不重叠，写在交接包里；Worker 只写本人冻结范围，越界或范围冲突先停写并交 Owner 裁决；formatter、生成脚本只作用于本人范围，不 stash、reset、checkout 或清理他人改动。
 - 共享工作区的 Git index/HEAD 操作（add、commit、切分支、reset 等）由 Owner 指定执行者和串行窗口，其余 Worker 在窗口内不动 index/HEAD；提交前在 add 之后核对 `git diff --cached --name-only` 及 staged diff 与获批集合完全一致，无法保证则停止提交。需要更强隔离时由 Owner 为具体任务安排独立 worktree。
-- 多个执行请求并行时，Owner 在相关请求均 DONE 后核对合并 diff，再发最终审查；修复按范围发回原 Worker。允许按 Owner 规则做阶段快照审查，最终合并审查仍在全部相关执行结束后。
+- 多个执行请求并行时，Owner 在相关请求均 DONE 后核对合并 diff，再发最终审查；修复按范围发回原 Worker。Owner 可以先对独立切片做阶段审查；最终合并审查仍在全部相关执行结束后进行。
 - 多个 Advisor 时，每个设计核验、局部答疑或审查请求只发给一个 Advisor，可按维度分派；不向同一 Advisor 并发派单。Advisor 只处理发给本人的请求。
 - Worker 之间不互相派单；局部问题问空闲 Advisor 或 Owner。
 

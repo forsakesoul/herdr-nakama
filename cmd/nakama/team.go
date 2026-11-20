@@ -644,7 +644,7 @@ func (a *app) checkVersions(t *Team) error { return a.checkVersionsFor(t, false)
 func (a *app) checkVersionsFor(t *Team, rules bool) error {
 	drift := func(format string, v ...any) error {
 		if rules {
-			return a.fail(L("当前编组的规则与已安装插件不一致：本会话应停止写入并报告用户；用户需重建编组。"))
+			return a.fail(L("编组的规则与已安装插件或上下文文件不一致或不可读：本会话应停止写入并报告用户；用户需重建编组或恢复上下文文件。"))
 		}
 		return a.fail(format, v...)
 	}
@@ -657,7 +657,7 @@ func (a *app) checkVersionsFor(t *Team, rules bool) error {
 	}
 	if t.Context != nil && t.Context.File != "" {
 		if !readableFile(t.Context.File) {
-			return a.fail(L("声明的上下文文件不可读：%s；停止初始化。"), t.Context.File)
+			return drift(L("声明的上下文文件不可读：%s；停止初始化。"), t.Context.File)
 		}
 		cur, _ = sha256File(t.Context.File)
 		if cur != t.Context.Sha256 {
