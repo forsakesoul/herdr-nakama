@@ -142,7 +142,7 @@ nakama update [--check] [--yes]
 - **一次发送做什么**：按任务目录里已有的文件分配请求号 `<task_id>/<成员键>-<序号>`，写入消息文件，核验收件人的冻结身份，再投递一条只含消息头、关联字段和 `file=<路径>` 的 prompt。`--reply sync` 最多等待 120 秒，然后输出收件人最近的回复。
 - **收件人不可用时**：只有 idle/done 的收件人会收到输入。working 时最多等待 60 秒一次；仍在 working、blocked、unknown 或身份漂移时不发送任何输入，命令输出 `delivery=NOT_SENT` 并以非零退出。消息和请求号保留在磁盘上，之后用 `--resend <req>` 投递同一条消息。
 - **投递状态**：`SENT`；`NOT_SENT`；`UNKNOWN`（prompt 命令失败且无法证明输入是否送达，重投前先用 `herdr agent read` 核对）；`SYNC`（`--no-deliver`：只记录、不反向投递的同步答复）。prompt 发出前先记为 `UNKNOWN`，所以进程被杀不会把一条可能已送达的消息留成未发送。
-- **代收转交**：由作者以外的成员执行 `--resend <req> --to <成员>`，消息原样转交，消息头多出 `relayed_by`。
+- **通用转交**：由作者以外的成员执行 `--resend <req> --to <成员>`，消息原样转交，消息头多出 `relayed_by`。Worker → Advisor → Owner 的代收不再作为策略使用。
 - **发件人**：pane 等于 `HERDR_PANE_ID` 的成员。只有拿不到该变量时才需要 `--from`；两者都有时必须一致。
 - **`status`**：对每个有台账的任务输出消息数和未结项：还没有 `DONE` 答复的请求（`WAITING`、`BLOCKED`、`PAUSED`），以及最后一次投递为 `NOT_SENT` 或 `UNKNOWN` 的消息。这个视图由台账推导；请求是否结清仍由各角色按协议裁决。
 - **不取锁**：`send` 只读编组状态，不取 team 锁。请求号用排他的硬链接分配，所以被中断的 `send` 不会留下卡住整个编组的遗留锁。

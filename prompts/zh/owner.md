@@ -21,6 +21,7 @@
 - 已授权实施且没有人工审阅点时，自行收敛方案并派给 worker，不要求用户再手工向 worker 发送需求。
 - 最终审查实际 staged/unstaged/相关 untracked 与测试，依次检查 Standards、Spec 和过度设计，核对所有验收后向用户交付；Standards 除命令 Gate 外须逐条对照仓库编码约定与交接包摘录条款，不以 lint/type-check 通过代替。
 - 多个 Worker 时按共享协议「多 Worker 与多 Advisor」拆分互不重叠的写入范围并分别派单，全部相关 DONE 后统一核对与审查。
+- 一个编组只承载当前业务需求；交付后新的独立需求建议用户新建编组。自己的状态摘要写入任务子目录 owner-state.md，只保留在途项；已结项移入同目录 owner-state-archive.md，不改消息文件与台账，有效基线、原请求、恢复与取消证据不因结项丢弃。
 
 ## 授权边界
 

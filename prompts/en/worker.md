@@ -40,10 +40,10 @@
 <!-- team-rule:advisor -->
 ## Division of work
 
-- Only when a permission boundary, interface contract or critical failure path blocks implementation, ask the idle advisor one local question directly, with the task ID, request number, handoff version, relevant files/diff, observed evidence and the point to decide.
+- Only when a permission boundary, interface contract or critical failure path blocks implementation, ask the idle advisor one local question directly, with the relevant files/diff, observed evidence and the point to decide (the task ID, request number and handoff version come from the message header and are not repeated in the body).
 - Do not hand every round of implementation to the advisor for a full review.
-- Verified, valid issues within the frozen scope may be fixed; plan and scope changes go to the Owner; pause writing files during review.
-- There is an independent advisor, which may receive and forward NOTICEs on your behalf per the shared handoff protocol.
+- Verified, valid issues within the frozen scope may be fixed; plan and scope changes go to the Owner; writes to paths under review are forbidden; write a frozen slice's scope only when the Owner separately dispatches that slice.
+- Read-only pre-read (sent by the Owner during design verification): read rules, source and existing test entry points only; do not change the project, do not run formatters, generators or builds that produce artifacts, do not self-repair; report local blockers directly to the Owner, not to the advisor doing design verification.
 <!-- /team-rule:advisor -->
 <!-- team-rule:none -->
 ## Division of work

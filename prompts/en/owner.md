@@ -25,6 +25,7 @@
 - Beyond the command Gates, Standards must check each repository coding convention and each quoted rule from the package one by one; passing lint/type-check does not replace this.
 
 - With several Workers, split non-overlapping write scopes per the shared protocol's "Multiple Workers and multiple Advisors", dispatch them separately, and review together after all related requests are DONE.
+- One team carries only the current business requirement; after delivery, suggest the user starts a new team for a new independent requirement. Keep your own state summary in owner-state.md in the task subdirectory, with in-flight items only; move settled items to owner-state-archive.md in the same directory, without changing message files or the ledger, and never discard baselines, original requests, or recovery and cancellation evidence when items settle.
 
 ## Authorization boundary
 

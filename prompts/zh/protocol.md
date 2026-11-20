@@ -60,7 +60,7 @@
 
 - 上方任务映射是编组绑定；Owner 为独立业务需求分配唯一 task_id（首次可沿用编组 ID，复用编组须给新 ID），先结束旧任务并安排新会话初始化与交接，不为编号在活跃编组重跑建组命令。
 - req=<task_id>/<角色实例>-<序号>，如 op_x/W2-003，由发送命令按任务目录中本实例已有的文件自动递增分配，不手工编号；角色实例使用映射中的 O1、W1/W2…、A1/A2…（同一编组可有多个 Worker 与 Advisor）。
-- 新逻辑请求、同步答复、异步结果均是一次新的发送（新 req）；重试、补送和代收转交用 --resend <req> 沿用原编号及关联，不再次推进业务。
+- 新逻辑请求、同步答复、异步结果均是一次新的发送（新 req）；重试、补送和通用转交用 --resend <req> 沿用原编号及关联，不再次推进业务。
 - 新增或替换角色才产生新的映射实例，实例号按角色递增且不复用；TEAM_UPDATE 不改变存活角色身份。
 
 ### 短标题
@@ -162,19 +162,19 @@
 
 - 每条消息的 delivery=NOT_SENT|SENT|UNKNOWN 由发送命令记入任务目录的台账（ledger.jsonl），与 reply_state 分开；上方映射给出的状态命令列出未答复请求与未送达消息，它只是线索，请求是否结清仍按 reply 状态机裁决。
 - 收件人忙或投递失败保留 RELAY_PENDING，结果尚未完整读到保留 READ_PENDING；两者都不结清请求。
-- 结果已生成而 delivery 不是 SENT 时不能写“已反馈”；Advisor 代收送达只证明送到 Advisor，不证明 Owner 已处理。
+- 结果已生成而 delivery 不是 SENT 时不能写“已反馈”。
 - 同步答复默认由原 wait/read 取得，不反向发通知；收到 RESULT_REPLAY 时才用 --resend <答复 req> 补报，不要求 ACK。
 
 ### 回报闭环（所有角色）
 
-- 发起新业务异步请求时记录待回报清单及上述状态，投递后结束当前轮等待回报。
+- 发起异步请求先登记待回报清单和状态；本轮投递与结束规则见「异步回报」。
 - 被其他请求唤醒时先核对并补送自身 RELAY_PENDING；结束当前轮前，对尚未收齐回报的目标各 get/read 一次，按 req、from、responds_to、版本和状态补读结果，也覆盖 Advisor 审查和 Worker 的局部澄清。
 - READ_PENDING 也按原请求补读；暂停/阻塞按有效裁决恢复，不重复派单，收到通知不回 ACK。
 - 无新唤醒且双方都已结束时，pending 不会自行恢复，Owner 明确报告待回报及此限制。
 
 ### 漏报补救
 
-- 仅 WAITING 且未提出取消的请求在 get/read 确认原收件人 idle/done、仍无可关联的完整答复时，保留 READ_PENDING；有代收记录时核对该 Advisor 的实际身份并 get/read 一次，取得有效完整通知就先消费，不再向 Worker 索取。
+- 仅 WAITING 且未提出取消的请求在 get/read 确认原收件人 idle/done、仍无可关联的完整答复时，保留 READ_PENDING。
 - 仍缺结果才在通信授权及身份核对后发一次 RESULT_REPLAY，带新控制 req、reply=async、原 execution_request、版本及原 reply_to，只索取已有结果，不重新实施、不扩大授权；同一原请求最多建立一个补报请求，失败重试保留该控制 req。
 - 接收方若已保存完整答复（含同步答复），核对原请求及当前有效性后用 --resend <原答复 req> 补投（沿用原答复 req 和 responds_to）；未保存完整结果则只读核验并生成关联原请求的新通知，无法确认完成则报 BLOCKED，不伪造 DONE。
 - 补报本身不新建待回报项，原请求只由有效回报转移；PAUSED、BLOCKED 走裁决，REPLIED、SUPERSEDED、CANCELLED 不发补报，不形成相互催报或自动重做循环。
@@ -193,7 +193,7 @@
 <!-- role:owner -->
 ### Owner
 
-- 每次冻结执行或修复交接包时，使用 <任务ID>_h1、<任务ID>_h2…递增编号，写明当前有效版本、基线及替代版本（首次为无）；交接包须显式带 reply=async、reply_to、用户对本编组任务通信的实际授权，并要求完成/阻塞后实际投递结果，不再次询问是否通知。
+- 每次冻结执行或修复交接包时，使用 <任务ID>_h1、<任务ID>_h2…递增编号，写明当前有效版本、基线及替代版本（首次为无）；交接包以 --reply async 发送（reply_to 写入消息头），正文写明用户对本编组任务通信的实际授权，并要求完成/阻塞后实际投递结果，不再次询问是否通知。
 - 未获得通信授权时先说明阻塞，不能自行声称已授权。
 - 忙碌 Worker 接收新 prompt 的行为尚未验证；需要替代时先记录变更，待 get/read 核对 Worker 已停止写入且 idle/done 后再发送新版，不向 working Worker 投递替代交接或承诺立即暂停。
 
@@ -266,21 +266,14 @@
 ### Worker 投递
 
 - 执行、修复或上下文停点的 NOTICE 默认 reply_to=Owner，局部异步请求按所附 reply_to 回报。
-- 按投递等待核对实际收件人；仅收件人为 Owner 且 working、有空闲独立 Advisor 时，可改投 Advisor，加 --set relay_to=<Owner 成员键> 注明代收并转交 Owner，不同时投递两边，并保留代收记录（实际名称、实例、通知 req、最终收件人和投递证据）；其余情况有界等待实际收件人。
+- 按投递等待核对实际收件人；收件人忙则有界等待，仍不可用则保留 RELAY_PENDING，不改投他人。
 - Worker 保持唯一 writer（多 Worker 时限于本人冻结写入范围）；Advisor 的局部核验请求不替代 Owner 的冻结执行交接包，不扩大修改范围。
-
-<!-- /role -->
-<!-- role:advisor -->
-### 独立 Advisor 代收
-
-- 收到注明代收的 NOTICE 后保持只读，按投递等待核对并有界等待 Owner；可投递时用 --resend <Worker 通知的 req> --to <Owner 成员键> 转交一次：原请求号、from、responds_to、交接版本、status 和完整 Worker 通知保持不变，消息头多出 relayed_by（即 RELAY_NOTICE）。
-- 不可用时保留完整通知并标 RELAY_PENDING；不向 Worker 发 ACK、不自行裁决或开始最终审查。
 
 <!-- /role -->
 <!-- role:owner -->
 ### Owner 接收
 
-- 按回报闭环等待和补读 NOTICE/RELAY_NOTICE；核对业务 task_id、当前有效版本、from 与 responds_to（须对应待回报清单中的原请求及预期收件人），不能仅凭交接版本推进。
+- 按回报闭环等待和补读 NOTICE；核对业务 task_id、当前有效版本、from 与 responds_to（须对应待回报清单中的原请求及预期收件人），不能仅凭交接版本推进。
 - 不匹配的通知只作历史证据；旧格式缺关联字段时先按已核对来源与交接记录补证，无法关联则 BLOCKED。
 - 只有 Worker 对执行/修复交接的 DONE 才触发实际 diff 与验收核对及后续审查；Advisor 答复只完成对应设计/审查请求，不重复发起同一审查。
 - CONTEXT_READY 按压缩流程整理并恢复，原执行请求继续待回报；BLOCKED 先裁决问题；范围/方案/验收变化重新冻结新版。
@@ -308,11 +301,12 @@
 ### 任务目录
 
 - 上方映射给出任务目录时，发送命令在 <任务目录>/<task_id>/ 下把每条消息写成一个文件（<角色实例>-<序号>.md，开头是消息头与关联字段，其后是完整正文）并维护台账；task_id 只用字母、数字、点、下划线和连字符。
-- 正文先写成草稿文件再经 --file 交给发送命令；Owner 的交接包在正文写明交接版本，并加 --set handoff=<交接版本>。消息文件写后不再修改，修订使用一次新的发送。
+- 正文先写成任务目录外的临时草稿文件，再经 --file 交给发送命令；交接版本经 --set handoff=<交接版本> 写入消息头。消息文件写后不再修改，修订使用一次新的发送。
+- task、req、from、to、reply、reply_to、status、responds_to 与 handoff 由发送命令参数写入消息头，正文不重复；正文只写头里没有的内容（如基线、替代版本、通信授权）。无任务目录的内联消息仍须完整写出头字段。
 - 收件人收到的 prompt 只有消息头、关联字段和 file=<路径>，读到完整文件才算取得完整结果。
 - 任务目录不是项目文件，不进入 diff、提交和审查范围：Advisor 对项目文件仍保持只读；Worker 作为（本人冻结范围内）唯一项目代码 writer 的约束不变。
 - 文件不含凭据、Cookie、Token 或可重放链接。
-- 补读、RESULT_REPLAY、压缩后的恢复以及中途加入或替换的角色，先读该子目录中最新的有效文件和状态命令的输出，再向其他角色索取。
+- 补读、RESULT_REPLAY、压缩后的恢复以及中途加入或替换的角色，只读消息文件（<实例>-<序号>.md），按原 req 的 responds_to、resumes、replaces 关联链与有效 handoff 定位，不按文件名排序猜“最新”；再运行状态命令核对，然后才向其他角色索取。
 - 映射未给出任务目录时发送命令不可用：正文内联在 herdr agent prompt 中，自行保证 req 唯一递增并记录 delivery。
 
 ### 任务目录清理
