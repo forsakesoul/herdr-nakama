@@ -3,14 +3,16 @@
 ## General verification
 
 - first choose verification methods from the current repository rules and this task's risk.
-- The Owner states the affected checks, real runtime evidence and required Gates in the handoff package; each acceptance criterion maps to evidence, with entry point, expected behavior and environment filled in as needed — small tasks do not require all four columns.
+- The Owner separates "affected checks that must run this round" from "the full Gate run once before final review" in the handoff; fix rounds run only the former by default, and the pre-delivery Gates are not lowered. Real runtime evidence maps to each acceptance item; entry point, expected behavior and environment are filled in as needed, and small tasks need not fill all four columns.
 - The Worker reuses existing tests and adds a minimal test or mock only for a concrete contract risk that existing verification cannot cover reliably, never out of habit; mark each item passed/failed/not run/blocked.
 - Local self-tests, CI, deployment, browser, permission evidence and tool cleanup are reported separately and cannot substitute for each other.
+- Review snapshot (one definition for all roles): the Worker generates it at the execution stop point; it contains the full base commit SHA, the path and sha256 of the cumulative patch from `git diff --binary --full-index <base>` (staged and unstaged), the path and sha256 of each related untracked file (or an archive and its sha256), the changed paths under review, and the source points behind the test evidence; it is stored in a snapshot subdirectory under the task directory and is never overwritten after generation. To read call chains or rerun tests, restore a read-only copy from `git archive <base>` plus the patch plus the untracked files; stash, commit, index operations and new worktrees are forbidden. If generation or verification fails, parallel work is not allowed.
+- patches, logs, JSON and screenshots are passed by path, size and key file:line only; the receiver locates what it needs with grep/tail. Read an image only when a visual judgment is needed and otherwise reuse others' conclusions; when an image is the key evidence for visual acceptance or a dispute, an independent Reviewer still reads it itself.
 
 ## Repository coding standards
 
 - conventions that lint/type checks cannot catch (component usage, shared hooks/components, state and error handling, etc.) are the easiest to miss.
-- The Owner quotes the applicable rules verbatim in the handoff package with their source (file:line), never just "read some document first"; the Worker marks each one followed/not applicable in the NOTICE and states the search results for similar existing code; when the Owner and Advisor review Standards, beyond the command Gates they must check each of these rules one by one, and passing lint/type-check does not replace this.
+- The Owner quotes the applicable rules verbatim in the handoff package with their source (file:line), never just "read some document first"; the Worker keeps checking each one, and the report lists one by one only the rules not passed, not verified or not applicable (with reasons), merges the passing ones into one line by the handoff's rule numbers, and states the search results for similar existing code; when the Owner and Advisor review Standards, beyond the command Gates they must check each of these rules one by one, and passing lint/type-check does not replace this.
 
 ## Skill use
 
@@ -80,7 +82,7 @@ applies to every team and every role; the team only decides recipients and the r
 
 ### Asynchronous reporting
 
-- The originator sends with --reply async and ends the current turn after delivery so the report drives what follows.
+- The originator sends with --reply async; independent requests to different members are each registered, the current turn ends after delivery so the report drives what follows, and requests to the same member are not sent concurrently (check each recipient's idle/done one by one).
 - When the receiver finishes or is blocked, before ending its current turn it actually runs the send command once to deliver one self-contained NOTICE to reply_to, without waiting for an ACK.
 - The NOTICE carries --responds-to <original req> and --status DONE|BLOCKED|CONTEXT_READY; CONTEXT_READY is only for Worker execution stop points, and an Advisor's DONE only means that request was answered.
 - When reporting within this task's team is authorized by the user, deliver as agreed and do not treat "whether to notify the Owner" as a new approval point; writing only a final reply or "about to notify" is not delivery; mark it delivered only after the command prints delivery=SENT, which does not mean the other side has read or handled it.
@@ -205,9 +207,10 @@ applies to every team and every role; the team only decides recipients and the r
 <!-- role:owner,worker -->
 ### Worker
 
-- send a NOTICE when finished, unable to continue or at a context-consolidation stop point, always with the task ID, a unique request number, the handoff version and status=DONE|BLOCKED|CONTEXT_READY.
+- send a NOTICE when finished, unable to continue or at a context-consolidation stop point; the task ID, unique request number, handoff version and status=DONE|BLOCKED|CONTEXT_READY are carried in the message header by the send command's arguments (--status, --responds-to, --set handoff=<handoff version>), and the body does not repeat them.
 - DONE means this round of execution has ended and file writes have stopped, not that all acceptance has passed; on BLOCKED stop affected writes and attach observed evidence, completed items and one question for the Owner to rule on; CONTEXT_READY means execution is paused for the Owner to consolidate context, writes have stopped and current tools have wound down, and the task is not finished.
-- All three states attach file scope, actual behavior, verification results, Gates not run, risks and the current diff.
+- All three states attach file scope, actual behavior, verification results, Gates not run, risks, and the baseline→current diff command or immutable patch path (covering staged, unstaged and related untracked files) with git diff --stat, not the whole diff.
+- Read-only pre-read reports keep the original req with DONE/BLOCKED, carry no handoff or execution_request, and create no snapshot; the handoff-version and snapshot requirements above apply only to execution and fix reports.
 
 <!-- /role -->
 ### Multiple Workers and multiple Advisors
@@ -215,42 +218,47 @@ applies to every team and every role; the team only decides recipients and the r
 - When the mapping has several Workers, the Owner freezes a separate handoff package for each Worker with its own execution_request and reply state; handoff version numbers still increase within the task, and a new version for one Worker does not invalidate another Worker's valid version; the "currently valid version" is checked against the original request and its recipient.
 - Each Worker's write scope is non-overlapping by file or directory and is written in its handoff package; a Worker writes only its own frozen scope, stops writing on any overreach or scope conflict and refers it to the Owner; formatters and generators act only on the Worker's own scope and never stash, reset, checkout or clean up others' changes.
 - Git index/HEAD operations on the shared workspace (add, commit, branch switch, reset, etc.) are assigned by the Owner to one named executor and a serial window; other Workers do not touch the index/HEAD during that window. Before committing, after add, check that `git diff --cached --name-only` and the staged diff exactly match the approved set, and stop committing if this cannot be guaranteed. For stronger isolation, the Owner arranges a separate worktree for the specific task.
-- When several execution requests run in parallel, the Owner checks the merged diff once all related requests are DONE, then sends the final review; fixes go back to the originating Worker by scope.
+- When several execution requests run in parallel, the Owner checks the merged diff once all related requests are DONE, then sends the final review; fixes go back to the originating Worker by scope. Stage snapshot reviews may follow the Owner's rules; the final merged review still comes after all related executions finish.
 - With several Advisors, each design verification, local clarification or review request goes to exactly one Advisor, and may be split by dimension; the same Advisor is not sent requests concurrently. An Advisor handles only requests addressed to it.
-- Workers do not dispatch to each other; local questions go to an idle Advisor or the Owner. When relaying, choose any idle Advisor and deliver to one place only.
+- Workers do not dispatch to each other; local questions go to an idle Advisor or the Owner.
 
 ## Context and compaction
 
-<!-- role:owner,worker -->
 ### Context policy
 
-- the Owner states the Worker's consolidation policy in the frozen handoff; by default start preparing at 50% of the window used and arrange a safe stop point before 60%, with no cross-model absolute token cap; the Owner may set an earlier absolute budget per task, whichever comes first.
-- Use only the reliable current active context (including cached input) and window readings the host provides, never cumulative consumption or guessed usage; these are trial values, not quality inflection points.
-- The Worker evaluates the next phase when a change unit/verification wraps up; with substantial history and upcoming bulk reads of files or logs or large tool output, split ahead and prepare a recovery package at the current safe stop point instead of consolidating only at the line.
-- Without reliable readings, choose stop points by the task phases and expected input above, note the reading as unavailable, and do not poll tokens.
-- At the handling point, or when the next unit may eat the remaining budget, the Worker winds down tools, stops writing and sends CONTEXT_READY, and the Owner coordinates native compaction; a short task already finished simply reports DONE — never cut acceptance or interrupt unfinished operations for compaction, and do not wait until the window is nearly exhausted.
-- After compaction, with no new execution progress and an unchanged input budget, do not start consolidation again for the same phase; when native auto-compaction already satisfied this round's consolidation, reuse its evidence.
-
+<!-- role:owner,worker -->
+- the Owner states the Worker's consolidation policy in the frozen handoff and records each role's engine, model and effective window (source: the host status bar, /status or the engine config), updating them when a model or window changes; the Owner may set an earlier absolute budget per task, whichever comes first.
 <!-- /role -->
+- the preparation point is min(150k tokens, 50% of the effective window) and the handling point is min(200k tokens, 60% of the effective window). The effective window is the current model's window for this role, judged from the reliable current active context the host provides (including cached input) and the window reading; if the window is unknown but the host gives a used/remaining percentage, judge by 50%/60% used; if neither is available, choose a stop point by the task phase, note the reading gap, and never apply 150k/200k tokens directly. These are trial values, not quality inflection points.
+- Use only reliable readings, never cumulative consumption or guessed usage; without reliable readings, choose a safe stop point by the task phase and expected input, note the reading as unavailable, and do not poll tokens.
+<!-- role:owner,worker -->
+- The Worker evaluates the next phase when a change unit/verification wraps up; with substantial history and upcoming bulk reads of files or logs or large tool output, split ahead and prepare a recovery package at the current safe stop point instead of waiting to hit the line.
+- At the handling point, or when the next unit may eat the remaining budget, the Worker winds down tools, stops writing and sends CONTEXT_READY, and the Owner coordinates native compaction; a short task already finished simply reports DONE — never cut acceptance or interrupt unfinished operations for compaction, and do not wait until the window is nearly exhausted.
+<!-- /role -->
+<!-- role:owner,advisor -->
+- When the Owner or an Advisor reaches the handling point, at its own safe stop point (no unfinished tools; results due have been delivered, with NOT_SENT/UNKNOWN never written as delivered; no crossing of a pause or cancellation) it saves the recovery information; it compacts natively itself only when the user has explicitly authorized automatic compaction for this task and the host or Skill allows it, otherwise it reports "threshold reached, not compacted" and the manual /compact entry point.
+<!-- /role -->
+- Each consolidation runs compaction at most once; with no new execution progress and an unchanged input budget after compaction, do not start consolidation again for the same phase; when native auto-compaction already satisfied this round's consolidation, reuse its evidence, and if compaction freed no space, do not loop.
+
 ### User-requested compaction (all roles)
 
 - when the user explicitly asks the current role session to compact, if the [long-task](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill (a user-defined compaction Skill, not bundled with the plugin) is installed, follow its automatic compaction branch to save this role's duties, current task and recovery state at a safe stop point, arrange a single native compaction of this session and resume after verifying it completed.
 - This branch does not need the Owner to operate it and only controls the caller's own pane/session; it does not switch models automatically, re-initialize, reset request numbers, turn standby or blocked into execution, or widen write and communication authorization.
 - Existing PAUSED/BLOCKED requests still continue only under valid Owner resume control; the recovery package is not a new ruling or authorization.
-- Without an explicit compaction request continue with the policy above; without support, keep the recovery package and report the manual native compaction entry point, without simulating success.
+- Without an explicit compaction request, continue to follow the thresholds and authorization rules of the context policy (the Owner and Advisor without automatic compaction authorization only report "threshold reached, not compacted" and the /compact entry point); without support, keep the recovery package and report the manual native compaction entry point, without simulating success.
 
 <!-- role:owner,worker -->
 ### Duty preservation
 
 - the Owner saves a duty capsule in the frozen handoff and recovery packages, written from these elements: single writer (with multiple Workers, the only writer within its own frozen scope), implement, test and self-review within the Owner's frozen scope, protect unrelated changes, plan conflicts go to the Owner, actually report per the communication protocol, keep commit/push/external-send authorization boundaries, never spawn Agents; plus the current valid task's authoritative seam, invariants, applicable rules, full acceptance criteria, completed/remaining items and the next action.
 - The capsule contains no initialization-wait instruction; a resume cannot just say "continue", and must not change models or role instances, reset request numbers, or turn the writer into the Owner/Advisor.
-- A Worker after native auto-compaction or active consolidation first verifies read-only the duty capsule, latest valid handoff, cancellation/invalidation records and workspace evidence after resuming; if any is missing, BLOCKED to gather evidence — never guess duties from a compaction summary or drop acceptance.
+- A Worker resuming per the "Recovery information" verifies read-only the duty capsule, latest valid handoff, cancellation/invalidation records and workspace evidence; if any is missing, BLOCKED to gather evidence — never guess duties from a summary or drop acceptance.
 - The capsule keeps the necessary rules and evidence locations without copying whole history logs; consolidation cannot replace implementation or claim the task is done.
 
 <!-- /role -->
 ### Recovery information
 
-- during native auto-compaction, active consolidation or session recovery, every role keeps the current task_id, role instance, pending-report list (including reply_state, latest valid report and resume/catch-up request reqs), current pause/block event req, consumed resume reqs and their resumes, cancellation intent and stop-writing evidence, cancellation control reqs, cancellation marks and invalidated instructions, relay records, the complete content of READ_PENDING/RELAY_PENDING and the reqs already handled; req sequences and delivery come from the task directory's ledger, so run the status command first when recovering.
+- during native auto-compaction, active consolidation or session recovery, every role first runs the rules command and the status command, then verifies identity and records; if rule re-reading fails, it stops at read-only evidence gathering and never continues from the compaction summary; it keeps the current task_id, role instance, the req of each request still awaiting a report with its verified reply_state, latest valid report, the current pause/block event req, consumed resume/catch-up/cancellation records, cancellation intent and stop-writing evidence, cancellation control req and invalidated instructions, and the location of the content of READ_PENDING/RELAY_PENDING and the reqs already handled. req sequences and delivery are not recorded separately; rebuild the index with the status command.
 - With CONTEXT_READY the Worker also attaches the duty capsule, team/valid handoff version, the original execution request number execution_request, cwd/branch/HEAD, frozen scope and authorization, acceptance and invariants, protection of existing changes, completed/remaining items, failure and verification evidence and the next step; never credentials or replayable links.
 - The Owner keeps the complete recovery information before compacting; recovery first verifies identity and records, and nothing is reset by compaction, fixes or TEAM_UPDATE.
 

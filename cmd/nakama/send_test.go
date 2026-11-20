@@ -150,8 +150,41 @@ func TestProtocolIsScopedByRole(t *testing.T) {
 	has(t, worker, "### reply 状态机", "worker 也发起请求")
 	hasNot(t, advisor, "### Worker 投递", "advisor 不收 worker 小节")
 	hasNot(t, advisor, "### reply 状态机", "advisor 不发起请求")
-	has(t, advisor, "### 独立 Advisor 代收", "advisor 小节")
-	hasNot(t, owner, "### 独立 Advisor 代收", "owner 不收 advisor 小节")
+	has(t, advisor, "## 审查输出", "advisor 小节")
+	hasNot(t, owner, "## 审查输出", "owner 不收 advisor 小节")
+	hasNot(t, worker, "## 审查输出", "worker 不收 advisor 小节")
+	hasNot(t, advisor, "### 独立 Advisor 代收", "代收小节已删除")
+	// 上下文策略：Worker 专属整理句不进 Advisor；Owner/Advisor 自行压缩句不进 Worker。
+	hasNot(t, advisor, "到处理点或下一单元可能吃掉余量时", "advisor 不收 CONTEXT_READY 整理句")
+	hasNot(t, worker, "仅当本任务已有用户明确的自动压缩授权", "worker 不收 Owner/Advisor 自行压缩句")
+	has(t, advisor, "仅当本任务已有用户明确的自动压缩授权", "advisor 收自行压缩句")
+	// h5：快照定义三角色可见；调度（S_A/S_AB）只给 Owner，写保护与预热只读例外给 Worker，快照审查来源给 Advisor。
+	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
+		has(t, p, "审查快照（所有角色共用定义）", name+" 收快照定义")
+	}
+	has(t, owner, "S_AB", "owner 收并行与修复调度")
+	hasNot(t, worker, "S_AB", "worker 不收 Owner 调度")
+	hasNot(t, advisor, "S_AB", "advisor 不收 Owner 调度")
+	has(t, worker, "在审快照的改动路径禁止写", "worker 收写保护")
+	has(t, worker, "只读预热", "worker 收只读预热例外")
+	has(t, owner, "只读预热请求", "owner 收预热派发")
+	has(t, advisor, "不可变快照", "advisor 收快照审查来源")
+	// h6：预热回报不要求 handoff、快照仅按交接包要求生成；全局通过点要求全部累计差异。
+	for name, p := range map[string]string{"owner": owner, "worker": worker} {
+		has(t, p, "只读预热的回报按原 req 回 DONE/BLOCKED", name+" 收预热回报规则")
+	}
+	hasNot(t, advisor, "只读预热的回报按原 req 回 DONE/BLOCKED", "advisor 不收 Worker 回报条")
+	has(t, worker, "若 Owner 在交接包要求阶段或最终快照审查", "worker 快照仅按交接要求生成")
+	has(t, owner, "仅当快照截至该点的全部累计差异都已审通过时才推进全局点", "owner 全局通过点条件")
+	// 规则重读失败停点在恢复信息（所有角色可见），不只在 Owner/Worker 的职责保全里。
+	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
+		has(t, p, "规则重读失败则停在只读补证", name+" 收规则重读失败停点")
+	}
+	has(t, worker, "到处理点或下一单元可能吃掉余量时", "worker 收整理句")
+	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
+		has(t, p, "一次整理只压缩一次", name+" 收共享整理句")
+		has(t, p, "准备点=min(15 万 token, 有效窗口 50%)", name+" 收阈值句")
+	}
 	if len(worker) >= len(owner) || len(advisor) >= len(worker) {
 		t.Fatalf("按角色裁剪后应 owner > worker > advisor：%d %d %d", len(owner), len(worker), len(advisor))
 	}
