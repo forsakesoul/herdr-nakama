@@ -638,13 +638,22 @@ func (a *app) ensureRole(t *Team, key string) error {
 }
 
 // ---- 版本核对（init 前）：protocol 与 context 的 sha256 必须等于记录值；不自动改 hash ----
-func (a *app) checkVersions(t *Team) error {
+func (a *app) checkVersions(t *Team) error { return a.checkVersionsFor(t, false) }
+
+// rules 路径给出专用漂移文案（已安装插件与编组记录的规则不一致）；其余调用点文案不变。
+func (a *app) checkVersionsFor(t *Team, rules bool) error {
+	drift := func(format string, v ...any) error {
+		if rules {
+			return a.fail(L("当前编组的规则与已安装插件不一致：本会话应停止写入并报告用户；用户需重建编组。"))
+		}
+		return a.fail(format, v...)
+	}
 	cur, err := a.protocolSha()
 	if err != nil {
 		return a.fail(L("无法读取 protocol.md：%v"), err)
 	}
 	if cur != t.ProtocolVersion {
-		return a.fail(L("protocol.md 已变化（记录 %s，当前 %s）；请重新 up 新组或人工确认，不自动改 hash。"), t.ProtocolVersion, cur)
+		return drift(L("protocol.md 已变化（记录 %s，当前 %s）；请重新 up 新组或人工确认，不自动改 hash。"), t.ProtocolVersion, cur)
 	}
 	if t.Context != nil && t.Context.File != "" {
 		if !readableFile(t.Context.File) {
@@ -652,7 +661,7 @@ func (a *app) checkVersions(t *Team) error {
 		}
 		cur, _ = sha256File(t.Context.File)
 		if cur != t.Context.Sha256 {
-			return a.fail(L("上下文文件已变化（记录 %s，当前 %s）；请重新 up 新组或人工确认，不自动改 hash。"), t.Context.Sha256, cur)
+			return drift(L("上下文文件已变化（记录 %s，当前 %s）；请重新 up 新组或人工确认，不自动改 hash。"), t.Context.Sha256, cur)
 		}
 	}
 	return nil

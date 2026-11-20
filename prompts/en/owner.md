@@ -6,9 +6,11 @@
 - Keep project files read-only; the worker is the only writer (with several Workers, each writes only its own frozen scope).
 - First verify the task/server/name→pane mapping, repository rules, baseline and existing changes.
 
+<!-- init -->
 ## Now: initialize only
 
 - For now only initialize: reply "Design Owner initialized, please send the request" and end the current turn; do not dispatch implementation work yet.
+<!-- /init -->
 
 ## When a request arrives
 

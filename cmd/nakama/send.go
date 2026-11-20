@@ -160,6 +160,25 @@ func (a *app) senderKey(t *Team, cliFrom string) (string, error) {
 	return from, nil
 }
 
+// 发件人：在册、已初始化且冻结身份仍匹配的成员；send 与 rules 共用。
+// pane 被别的实例占用后，不能再以原成员名义写台账、发消息或读取规则。
+func (a *app) verifiedSender(t *Team, cliFrom string) (string, error) {
+	from, err := a.senderKey(t, cliFrom)
+	if err != nil {
+		return "", err
+	}
+	sr := t.role(from)
+	if !sr.Inited || sr.Stale || sr.Identity == nil {
+		return "", a.fail(L("发件人 %s 尚未初始化。"), from)
+	}
+	if obj, msg := a.verifyIdentity(t, from, sr.Identity, false); msg != "" {
+		if _, ok := fillSession(*sr.Identity, obj.ident()); !ok {
+			return "", a.fail("%s", msg)
+		}
+	}
+	return from, nil
+}
+
 // 分配请求号并落盘：序号取本实例已有文件的最大值加一，硬链接已存在就换下一个号重试。
 func (a *app) allocMessage(sub string, m *message, task string, body []byte) error {
 	next := 0
@@ -245,7 +264,9 @@ func (a *app) deliver(t *Team, sub string, m *message, sync bool) (string, strin
 	if a.appendLedger(sub, *m) != nil {
 		return "NOT_SENT", "ledger"
 	}
-	args := []string{"agent", "prompt", r.Name, m.header() + "\nfile=" + m.File}
+	// 规则原文不在上下文时可据此重读；只进投递 prompt，不写入消息文件与台账。
+	hint := fmt.Sprintf(L("规则原文不在上下文时先运行：%s rules --team %s"), a.cliPrefix(), t.TeamID)
+	args := []string{"agent", "prompt", r.Name, m.header() + "\nfile=" + m.File + "\n" + hint}
 	if sync {
 		args = append(args, "--wait", "--timeout", "120000")
 	}
@@ -301,19 +322,9 @@ func (a *app) cmdSend(args []string) error {
 	if err != nil {
 		return a.fail("%v", err)
 	}
-	from, err := a.senderKey(t, first(v["--from"]))
+	from, err := a.verifiedSender(t, first(v["--from"]))
 	if err != nil {
 		return err
-	}
-	// 发件人也按冻结身份核验：pane 被别的实例占用后，不能再以原成员名义写台账、发消息。
-	sr := t.role(from)
-	if !sr.Inited || sr.Stale || sr.Identity == nil {
-		return a.fail(L("发件人 %s 尚未初始化。"), from)
-	}
-	if obj, msg := a.verifyIdentity(t, from, sr.Identity, false); msg != "" {
-		if _, ok := fillSession(*sr.Identity, obj.ident()); !ok {
-			return a.fail("%s", msg)
-		}
 	}
 	if req := first(v["--resend"]); req != "" {
 		for k := range v {

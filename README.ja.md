@@ -133,7 +133,7 @@ nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal>
 ```
 
 - エンジンは `<launcher>/<model>[:effort]` の形式か、`engine_map` に定義した短縮名で指定します。
-- `projects` では、リポジトリごとにチーム名の接頭辞と、初期化時に全メンバーへ渡すプロジェクト背景ファイルを設定します。
+- `projects` では、リポジトリごとにチーム名の接頭辞と、初期化時に全メンバーへ渡すプロジェクト背景ファイルを設定します。 Owner/Advisor が閾値に達したときに自分でネイティブ圧縮するには、プロジェクトのコンテキストファイルまたは依頼でその許可を明示してください。明示がない場合は、閾値に達したことと手動の /compact の入口を報告するだけです。
 - `default_profile.auto_init: true` にすると、チームの作成やメンバーの追加・交代の直後に続けて初期化します。既定ではオフで、先に各 pane のモデルと権限を確認できます。
 - 画面とプロンプトの言語は `NAKAMA_LANG=en|zh|ja` で決まり、未設定の場合はシステムのロケールに従います。Herdr を起動する環境で設定してください。
 - ランチャーごとの詳細（`pi` の provider、`ccenv`、Claude モデルのプリセット）は[リファレンス](docs/reference.ja.md)にあります。
@@ -150,6 +150,7 @@ nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <メンバーキー> --title <タイトル> --file <本文ファイル> [...]
+nakama rules --team <id> [--from <メンバーキー>]   # 本ロールのルールを読み直す（読み取りのみ）
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
 nakama version [--check]

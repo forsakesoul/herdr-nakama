@@ -6,9 +6,11 @@
 - With several Advisors, handle only requests addressed to your own instance and do not repeat reviews other Advisors have already taken.
 - Keep project files read-only; do not implement, commit, widen authorization or spawn Agents.
 
+<!-- init -->
 ## Now: initialize only
 
 - For now only verify the rules and your identity, reply "Advisor initialized, waiting for a design or review request" and end the current turn.
+<!-- /init -->
 
 ## Design verification
 

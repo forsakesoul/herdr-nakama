@@ -18,8 +18,9 @@ func (a *app) protocolSha() (string, error) {
 	return sha256File(a.protocolPath())
 }
 
-// 模板标记：team-rule:<variant>、mid-task 两类块；块内行仅在命中时输出。
-func renderRole(tpl, variant string, incMid bool) string {
+// 模板标记：team-rule:<variant>、mid-task、init 三类块；块内行仅在命中时输出，标记行本身从不输出。
+// init 段只属于初始化 prompt；规则重读（rules）与 mid-task 段都不带。
+func renderRole(tpl, variant string, incMid, incInit bool) string {
 	var out strings.Builder
 	blk := -1 // -1 不在块内；1 输出；0 丢弃
 	lines := strings.Split(tpl, "\n")
@@ -39,6 +40,12 @@ func renderRole(tpl, variant string, incMid bool) string {
 			blk = b2i(incMid)
 			continue
 		case line == "<!-- /mid-task -->":
+			blk = -1
+			continue
+		case line == "<!-- init -->":
+			blk = b2i(incInit)
+			continue
+		case line == "<!-- /init -->":
 			blk = -1
 			continue
 		}
@@ -147,9 +154,17 @@ func selfLine(t *Team, key string) string {
 	return fmt.Sprintf(L("你的实例：%s（%s）"), key, t.role(key).Name) + "\n"
 }
 
-// 映射之后的附加行：已停用实例、任务目录与清理命令。旧组（无任务目录、无停用实例）为空，prompt 不变。
+// 插件 CLI 的调用前缀（状态目录环境变量 + 可执行文件路径）；映射附加行与投递提示共用。
+func (a *app) cliPrefix() string {
+	exe, _ := os.Executable()
+	return "HERDR_PLUGIN_STATE_DIR=" + posixQuote(a.st.dir) + " " + posixQuote(exe)
+}
+
+// 映射之后的附加行：规则命令（所有组都有）、已停用实例、任务目录与清理命令（仅有任务目录时）。
 func (a *app) mappingExtras(t *Team) string {
 	var b strings.Builder
+	bin := a.cliPrefix()
+	fmt.Fprintf(&b, L("规则命令（压缩或会话恢复后重读本角色规则）：%s rules --team %s\n"), bin, t.TeamID)
 	if len(t.Retired) > 0 {
 		var xs []string
 		for _, x := range t.Retired {
@@ -158,8 +173,6 @@ func (a *app) mappingExtras(t *Team) string {
 		fmt.Fprintf(&b, L("已停用实例（不再向其派单，也不接收其回报）：%s\n"), strings.Join(xs, "；"))
 	}
 	if t.TaskDir != "" {
-		exe, _ := os.Executable()
-		bin := "HERDR_PLUGIN_STATE_DIR=" + posixQuote(a.st.dir) + " " + posixQuote(exe)
 		fmt.Fprintf(&b, L("任务目录=%s。清理命令（仅在用户明确授权删除后执行）：%s\n"), t.TaskDir, bin+" clean --team "+t.TeamID+" --task <task_id> --yes")
 		fmt.Fprintf(&b, L("发送命令（成员间的业务消息一律经它投递，参数见共享交接协议）：%s send --team %s --task <task_id> --to <成员键> --title '<动作：对象>' --file <正文文件>\n"), bin, t.TeamID)
 		fmt.Fprintf(&b, L("状态命令（列出未答复请求与未送达消息）：%s\n"), bin+" status --team "+t.TeamID)
@@ -181,8 +194,17 @@ func (a *app) teamUpdatePrompt(t *Team, key string) (string, error) {
 		L("这是编组控制消息：以本条为准更新编组映射与分工，不回 ACK，不改变当前交接版本、冻结范围和授权。Owner 向新实例派单前，先核对被替换的旧执行者已停止写入。"), nil
 }
 
-// 组装完整 prompt；与旧实现一样去掉尾部换行。
+// 组装完整 prompt；与旧实现一样去掉尾部换行。初始化 prompt 带 init 段与 mid-task 条件段。
 func (a *app) assemblePrompt(t *Team, key string) (string, error) {
+	return a.buildPrompt(t, key, true)
+}
+
+// 规则重读（nakama rules）：同一组装 seam，但去掉 init 段与 mid-task 段。
+func (a *app) rulesPrompt(t *Team, key string) (string, error) {
+	return a.buildPrompt(t, key, false)
+}
+
+func (a *app) buildPrompt(t *Team, key string, initial bool) (string, error) {
 	variant := "none"
 	if t.hasAdvisor() {
 		variant = "advisor"
@@ -204,12 +226,42 @@ func (a *app) assemblePrompt(t *Team, key string) (string, error) {
 	b.WriteString(renderProtocol(string(proto), kind))
 	b.WriteString("\n\n")
 
-	incMid := kind != "owner" && t.owner().Inited
+	incMid := initial && kind != "owner" && t.owner().Inited
 	tpl, err := os.ReadFile(a.promptPath(kind))
 	if err != nil {
 		return "", a.fail(L("无法读取角色模板 %s：%v"), key, err)
 	}
-	role := renderRole(string(tpl), variant, incMid)
+	role := renderRole(string(tpl), variant, incMid, initial)
 	b.WriteString(role)
 	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+// rules：只读重读本角色规则（压缩或会话恢复后用）。调用者须是在册且身份核验通过的成员；
+// 版本漂移或上下文不可读时整体失败，stdout 不输出半份规则；不写状态、不投递 prompt。
+func (a *app) cmdRules(args []string) error {
+	v, help, err := a.parseArgs(args, L("用法：nakama rules --team <id> [--from <成员键>]\n"), []string{"--team", "--from"}, nil)
+	if help || err != nil {
+		return err
+	}
+	id, err := a.resolveTeam(first(v["--team"]), "", "")
+	if err != nil {
+		return err
+	}
+	t, err := a.st.load(id)
+	if err != nil {
+		return a.fail("%v", err)
+	}
+	from, err := a.verifiedSender(t, first(v["--from"]))
+	if err != nil {
+		return err
+	}
+	if err := a.checkVersionsFor(t, true); err != nil {
+		return err
+	}
+	prompt, err := a.rulesPrompt(t, from)
+	if err != nil {
+		return err
+	}
+	a.outf("%s\n", prompt)
+	return nil
 }

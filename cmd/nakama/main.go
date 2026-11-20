@@ -89,6 +89,7 @@ const usageText = `nakama — Herdr 原生编组插件（Owner / Worker / Adviso
   nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]  # 替换角色实例（旧 pane 保留）
   nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]  # 列出 / 清理任务目录
   nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [...]  # 成员间投递消息（由各角色调用，见 send --help）
+  nakama rules --team <id> [--from <成员键>]                                  # 只读重读本角色规则（压缩或会话恢复后）
   nakama down --team <id> [--yes]                                            # 解散编组（状态归档，不关闭 pane）
   nakama resolve --team <id> --delivered | --not-delivered                   # 人工核对后处理结果不明的投递
   nakama version [--check]                                                   # 显示版本；--check 同时查询最新发布
@@ -126,6 +127,8 @@ func (a *app) dispatch(args []string) error {
 		return a.cmdClean(args)
 	case "send":
 		return a.cmdSend(args)
+	case "rules":
+		return a.cmdRules(args)
 	case "down":
 		return a.cmdDown(args)
 	case "resolve":

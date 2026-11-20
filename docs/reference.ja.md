@@ -97,6 +97,7 @@ nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <メンバーキー> --title <タイトル> --file <本文ファイル> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <メンバーキー>]
 nakama send --team <id> --resend <req> [--to <メンバーキー>] [--from <メンバーキー>]
+nakama rules --team <id> [--from <メンバーキー>]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
 nakama version [--check]
@@ -230,7 +231,7 @@ stale にせず状態も書き込みません。`status` は読み取り専用�
 
 アーキテクチャタスクでは、`architecture` Skill（ユーザー定義、プラグインには含まれません）がインストールされていればロールごとに読み込み、なければ元の引き継ぎ契約で続行してギャップを明記します。プラグインは Skill のインストール、ロール分担の変更、チームの派生を行いません。テンプレートの変更は既存ロールのコンテキストを更新しません。初期化が完了していない古いチームは元のプロトコルハッシュのずれ検査で保護されたままで、状態をクリアして回避することはできません。
 
-ユーザーがいずれかのロールにコンテキスト圧縮を求めた場合は、インストール済みの [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill（ユーザー定義の圧縮 Skill、プラグインには同梱されません）の自動圧縮分岐を使います。本プラグインは既存の責務、一時停止 / 再開の許可、リクエスト状態との接続ルールのみを保持します。バックグラウンド制御は呼び出し元自身のセッションのみを対象とし、未インストールまたは制御プレーンが未対応の場合は復旧情報を保持してギャップを報告します。
+ユーザーがいずれかのロールにコンテキスト圧縮を求めた場合は、インストール済みの [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill（ユーザー定義の圧縮 Skill、プラグインには同梱されません）の自動圧縮分岐を使います。本プラグインは既存の責務、一時停止 / 再開の許可、リクエスト状態との接続ルールのみを保持します。バックグラウンド制御は呼び出し元自身のセッションのみを対象とし、未インストールまたは制御プレーンが未対応の場合は復旧情報を保持してギャップを報告します。 Owner と Advisor が閾値で自ら圧縮するのは、プロジェクトのコンテキストファイルまたは依頼で自動圧縮が明示的に許可されている場合に限ります。そうでなければ「閾値に到達、未圧縮」と手動の /compact の入口を報告します。
 
 ## テスト
 

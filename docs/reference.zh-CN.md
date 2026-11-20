@@ -97,6 +97,7 @@ nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <成员键>]
 nakama send --team <id> --resend <req> [--to <成员键>] [--from <成员键>]
+nakama rules --team <id> [--from <成员键>]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
 nakama version [--check]
@@ -230,7 +231,7 @@ CLI 无法证明 Herdr server 命名空间；锚点证据是 `pane get` 的 work
 
 架构任务在已安装 `architecture` Skill（用户自定义，插件不提供）时按当前角色读取，未安装则按原交接契约继续并注明缺口。插件不自动安装 Skill、不改变角色分工或派生团队。模板变更不会刷新已有角色上下文；未完成初始化的旧组仍受原协议 hash 漂移检查保护，不清除状态绕过。
 
-用户主动要求任一角色压缩时，使用已安装 [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill（用户自定义的压缩 Skill，插件不内置）的自动压缩分支；本插件只保留与既有职责、暂停/恢复授权及请求状态的衔接规则。后台控制只针对调用者自己的会话，未安装或控制面不支持时保留恢复信息并报告缺口。
+用户主动要求任一角色压缩时，使用已安装 [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill（用户自定义的压缩 Skill，插件不内置）的自动压缩分支；本插件只保留与既有职责、暂停/恢复授权及请求状态的衔接规则。后台控制只针对调用者自己的会话，未安装或控制面不支持时保留恢复信息并报告缺口。 Owner 与 Advisor 只有在项目上下文文件或需求中明确授权自动压缩时才在阈值处自行原生压缩；否则报告“已到阈值、未压缩”及手动 /compact 入口。
 
 ## 测试
 

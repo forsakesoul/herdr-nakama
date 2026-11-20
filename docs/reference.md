@@ -97,6 +97,7 @@ nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <member key> --title <title> --file <body file> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <member key>]
 nakama send --team <id> --resend <req> [--to <member key>] [--from <member key>]
+nakama rules --team <id> [--from <member key>]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
 nakama version [--check]
@@ -230,7 +231,7 @@ In `protocol.md`, the lines between `<!-- role:owner,worker -->` and `<!-- /role
 
 For architecture tasks, the `architecture` Skill (user-defined, not provided by the plugin) is read per role when installed; otherwise the original handoff contract continues and the gap is noted. The plugin does not install Skills, change role division or spawn teams. Template changes do not refresh existing role contexts; old teams that have not finished initialization remain protected by the original protocol-hash drift check, which is never bypassed by clearing state.
 
-When the user asks any role to compact its context, the automatic compaction branch of an installed [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill (a user-defined compaction Skill, not bundled with the plugin) is used; this plugin only keeps the rules connecting it to existing duties, pause/resume authorization and request state. Background control targets only the caller's own session; when not installed or unsupported by the control plane, recovery information is kept and the gap reported.
+When the user asks any role to compact its context, the automatic compaction branch of an installed [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill (a user-defined compaction Skill, not bundled with the plugin) is used; this plugin only keeps the rules connecting it to existing duties, pause/resume authorization and request state. Background control targets only the caller's own session; when not installed or unsupported by the control plane, recovery information is kept and the gap reported. The Owner and Advisor compact natively at the threshold on their own only if the project context file or the request explicitly authorizes automatic compaction; otherwise they report "threshold reached, not compacted" and the manual /compact entry.
 
 ## Tests
 

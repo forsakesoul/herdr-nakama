@@ -127,8 +127,8 @@ func TestSafeName(t *testing.T) {
 
 func TestRenderRoleBlocks(t *testing.T) {
 	tpl := "head\n<!-- team-rule:advisor -->\nA\n<!-- /team-rule:advisor -->\n<!-- team-rule:none -->\nN\n<!-- /team-rule:none -->\n<!-- mid-task -->\nM\n<!-- /mid-task -->\ntail"
-	eq(t, renderRole(tpl, "advisor", false), "head\nA\ntail\n", "advisor 变体")
-	eq(t, renderRole(tpl, "none", true), "head\nN\nM\ntail\n", "none + mid")
+	eq(t, renderRole(tpl, "advisor", false, false), "head\nA\ntail\n", "advisor 变体")
+	eq(t, renderRole(tpl, "none", true, false), "head\nN\nM\ntail\n", "none + mid")
 }
 
 func TestValidateRejectsLooseStates(t *testing.T) {
