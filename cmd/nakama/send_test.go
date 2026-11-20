@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,7 +78,7 @@ func TestSendRelayNoDeliverAndSync(t *testing.T) {
 	owner, advisor := id+"_design", id+"_advisor"
 
 	e.mustRun("send", "--team", id, "--from", "W1", "--task", "op_x", "--to", "A1", "--title", "完成：x", "--file", body, "--status", "DONE", "--set", "relay_to=O1")
-	has(t, e.lastPrompt(advisor), "relay_to=O1", "代收标记")
+	has(t, e.lastPrompt(advisor), "relay_to=O1", "转交标记")
 	e.mustRun("send", "--team", id, "--from", "A1", "--resend", "op_x/W1-000", "--to", "O1")
 	p := e.lastPrompt(owner)
 	has(t, p, "req=op_x/W1-000 from=W1 to=O1 status=DONE", "转交沿用原请求号与发件人")
@@ -149,8 +150,51 @@ func TestProtocolIsScopedByRole(t *testing.T) {
 	has(t, worker, "### reply 状态机", "worker 也发起请求")
 	hasNot(t, advisor, "### Worker 投递", "advisor 不收 worker 小节")
 	hasNot(t, advisor, "### reply 状态机", "advisor 不发起请求")
-	has(t, advisor, "### 独立 Advisor 代收", "advisor 小节")
-	hasNot(t, owner, "### 独立 Advisor 代收", "owner 不收 advisor 小节")
+	has(t, advisor, "## 审查输出", "advisor 小节")
+	hasNot(t, owner, "## 审查输出", "owner 不收 advisor 小节")
+	hasNot(t, worker, "## 审查输出", "worker 不收 advisor 小节")
+	hasNot(t, advisor, "### 独立 Advisor 代收", "代收小节已删除")
+	// 上下文策略：Worker 专属整理句不进 Advisor；Owner/Advisor 自行压缩句不进 Worker。
+	hasNot(t, advisor, "到处理点或下一单元可能吃掉余量时", "advisor 不收 CONTEXT_READY 整理句")
+	hasNot(t, worker, "仅当本任务已有用户明确的自动压缩授权", "worker 不收 Owner/Advisor 自行压缩句")
+	has(t, advisor, "仅当本任务已有用户明确的自动压缩授权", "advisor 收自行压缩句")
+	// h5：快照定义三角色可见；调度（S_A/S_AB）只给 Owner，写保护与预热只读例外给 Worker，快照审查来源给 Advisor。
+	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
+		hasNot(t, p, "审查快照（所有角色共用定义）", name+" 协议不再定义快照")
+		hasNot(t, p, "git archive", name+" 无只读副本要求")
+	}
+	has(t, owner, "并行放行", "owner 收并行放行规则")
+	has(t, owner, "写全快照内容与含义", "owner 收快照内容要求")
+	has(t, owner, "git diff --binary --full-index <base> -- <在审路径>", "owner 收哈希契约命令")
+	has(t, worker, "交接包要求快照时", "worker 收快照仅按交接要求生成")
+	has(t, worker, "同一条命令与路径集合", "worker 收同一命令契约")
+	has(t, advisor, "默认审查 Owner 指定基线到当前的 live diff", "advisor 收默认审查来源")
+	hasNot(t, worker, "并行放行", "worker 不收 Owner 并行规则")
+	hasNot(t, advisor, "并行放行", "advisor 不收 Owner 并行规则")
+	hasNot(t, worker, "S_AB", "worker 不收 Owner 调度")
+	hasNot(t, advisor, "S_AB", "advisor 不收 Owner 调度")
+	has(t, worker, "审查针对的改动路径在审查期间禁止写", "worker 收写保护")
+	has(t, worker, "只读预热", "worker 收只读预热例外")
+	has(t, owner, "只读预热请求", "owner 收预热派发")
+	has(t, advisor, "默认审查 Owner 指定基线到当前的 live diff", "advisor 收快照审查来源")
+	has(t, advisor, "同一条命令（同一 base、同参数、同路径集合）", "advisor 收前后同命令比对")
+	has(t, advisor, "git ls-files --others --exclude-standard", "advisor 收 untracked 清单比对")
+	// h6：预热回报不要求 handoff、快照仅按交接包要求生成；全局通过点要求全部累计差异。
+	for name, p := range map[string]string{"owner": owner, "worker": worker} {
+		has(t, p, "只读预热的回报按原 req 回 DONE/BLOCKED", name+" 收预热回报规则")
+	}
+	hasNot(t, advisor, "只读预热的回报按原 req 回 DONE/BLOCKED", "advisor 不收 Worker 回报条")
+	hasNot(t, worker, "若 Owner 在交接包要求阶段或最终快照审查", "worker 旧快照句已删除")
+	has(t, owner, "只有截至某点的全部累计差异都已审过，才推进全局通过点", "owner 全局通过点条件")
+	// 规则重读失败停点在恢复信息（所有角色可见），不只在 Owner/Worker 的职责保全里。
+	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
+		has(t, p, "规则重读失败则停在只读补证", name+" 收规则重读失败停点")
+	}
+	has(t, worker, "到处理点或下一单元可能吃掉余量时", "worker 收整理句")
+	for name, p := range map[string]string{"owner": owner, "worker": worker, "advisor": advisor} {
+		has(t, p, "一次整理只压缩一次", name+" 收共享整理句")
+		has(t, p, "准备点=min(15 万 token, 有效窗口 50%)", name+" 收阈值句")
+	}
 	if len(worker) >= len(owner) || len(advisor) >= len(worker) {
 		t.Fatalf("按角色裁剪后应 owner > worker > advisor：%d %d %d", len(owner), len(worker), len(advisor))
 	}
@@ -390,4 +434,115 @@ func TestUndeliveredControlMessagesDoNotSettle(t *testing.T) {
 	e.mustRun("send", "--team", id, "--from", "O1", "--resend", "op/O1-003")
 	argv := e.argvs()[len(e.argvs())-2]
 	eq(t, strings.Join(argv[len(argv)-3:], " "), "--wait --timeout 120000", "重投保留同步等待")
+}
+
+// rules：只读重读本角色规则；与初始化 prompt 相比去掉 init 段与 mid-task 段，保留裁剪后的协议与映射。
+func TestRulesRereadsRoleRulesWithoutInitOrMidTask(t *testing.T) {
+	e, id, _ := sendSetup(t, true)
+	statePath := e.stateFile()
+	before, _ := os.ReadFile(statePath)
+	n := e.count("agent", "prompt")
+
+	t.Setenv("HERDR_PANE_ID", e.str("roles", "W1", "pane"))
+	out := e.mustRun("rules", "--team", id)
+	has(t, out, "你的角色：Worker", "输出本角色模板")
+	has(t, out, "### reply 状态机", "保留协议正文")
+	has(t, out, "消息实例：Owner=O1", "保留映射")
+	has(t, out, "规则命令", "映射含规则命令行")
+	hasNot(t, out, "现在：只初始化", "去掉 init 段")
+	hasNot(t, out, "任务已在进行中加入", "去掉 mid-task 段")
+	hasNot(t, out, "<!--", "标记行不输出")
+	hasNot(t, out, "### 独立 Advisor 代收", "协议不含已删除的代收段")
+	eq(t, e.count("agent", "prompt"), n, "不投递 prompt")
+	after, _ := os.ReadFile(statePath)
+	eq(t, string(after), string(before), "不写状态")
+
+	t.Setenv("HERDR_PANE_ID", "")
+	has(t, e.mustFail("rules", "--team", id), "无法确定发件人", "无 pane 且无 --from 时拒绝")
+	t.Setenv("HERDR_PANE_ID", "w0:p99")
+	has(t, e.mustFail("rules", "--team", id, "--from", "W1"), "不是编组", "pane 不是在册成员时拒绝")
+	t.Setenv("HERDR_PANE_ID", "")
+	e.rowSet(id+"_execute", e.str("roles", "W1", "pane"), "term_other", "codex", "")
+	has(t, e.mustFail("rules", "--team", id, "--from", "W1"), "实例身份漂移", "身份不一致时拒绝")
+}
+
+// 协议或上下文漂移：整体失败，stdout 不输出半份规则，不写状态。
+func TestRulesRejectsDriftWithoutPartialOutput(t *testing.T) {
+	e, id, _ := sendSetup(t, false)
+	e.stateSet(func(m map[string]any) { m["protocol_version"] = "sha256:stale" })
+	before, _ := os.ReadFile(e.stateFile())
+	out := e.mustFail("rules", "--team", id, "--from", "W1")
+	has(t, out, "编组的规则与已安装插件或上下文文件不一致或不可读", "协议漂移被拒绝")
+	hasNot(t, out, "你的角色：Worker", "不输出半份规则")
+	after, _ := os.ReadFile(e.stateFile())
+	eq(t, string(after), string(before), "不写状态")
+}
+
+// 旧组（无任务目录）的映射也带规则命令行。
+func TestMappingExtrasRulesLineForLegacyTeams(t *testing.T) {
+	a := &app{st: newStore()}
+	has(t, a.mappingExtras(&Team{TeamID: "t1"}), " rules --team t1", "无任务目录时也输出规则命令")
+}
+
+// 大正文按 16KB 边界提示；任务目录只在本次新建且数量 ≥5 时提示一次；提示均不阻断投递。
+func TestSendHintsForLargeBodyAndManyTasks(t *testing.T) {
+	e, id, body := sendSetup(t, false)
+	root := filepath.Join(realPath(e.proj), ".nakama", id)
+	send := func(task, title, file string) string {
+		return e.mustRun("send", "--team", id, "--from", "O1", "--task", task, "--to", "W1", "--title", title, "--file", file)
+	}
+	// 首次新建 op_x：数量 1，不提示。
+	hasNot(t, send("op_x", "派单：首次", body), "本编组已有", "新建但数量不足不提示")
+	for _, c := range []struct {
+		n    int
+		warn bool
+	}{{16384, false}, {16385, true}} {
+		f := filepath.Join(e.root, fmt.Sprintf("body%d.md", c.n))
+		os.WriteFile(f, []byte(strings.Repeat("a", c.n)), 0o644)
+		out := send("op_x", "派单：正文边界", f)
+		if c.warn {
+			has(t, out, "超过 16KB", "16385 字节提示")
+		} else {
+			hasNot(t, out, "超过 16KB", "16384 字节不提示")
+		}
+		has(t, out, "delivery=SENT", "提示不阻断投递")
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "op_x", "O1-002.md"))
+	eq(t, len(b) > 16385, true, "正文未截断")
+
+	for _, k := range []string{"t1", "t2", "t3", "t4"} {
+		os.MkdirAll(filepath.Join(root, k), 0o700)
+	}
+	// 已存在任务再次 send 不提示（即使已有 ≥5 个任务目录）。
+	hasNot(t, send("op_x", "派单：已存在", body), "本编组已有", "已存在任务不提示")
+	hasNot(t, send("t1", "派单：已存在目录", body), "本编组已有", "已存在目录不提示")
+	// 本次新建且数量达到 5：提示一次。
+	out := send("op_new", "派单：新建", body)
+	has(t, out, "本编组已有 6 个任务目录", "新建后数量 ≥5 时提示")
+	has(t, out, "delivery=SENT", "提示不阻断投递")
+	hasNot(t, send("op_new", "派单：再次", body), "本编组已有", "同一任务再次 send 不提示")
+}
+
+// 投递 prompt 末尾带规则命令行；消息文件与台账不带；resend 的投递同样带。
+func TestDeliveryPromptCarriesRulesCommand(t *testing.T) {
+	e, id, body := sendSetup(t, false)
+	worker := id + "_execute"
+	e.mustRun("send", "--team", id, "--from", "O1", "--task", "op_x", "--to", "W1", "--title", "派单：规则", "--file", body)
+	p := e.lastPrompt(worker)
+	has(t, p, "规则原文不在上下文时先运行", "投递 prompt 带提示")
+	has(t, p, " rules --team "+id, "投递 prompt 带规则命令行")
+	sub := filepath.Join(realPath(e.proj), ".nakama", id, "op_x")
+	for _, f := range []string{"O1-000.md", ledgerName} {
+		b, _ := os.ReadFile(filepath.Join(sub, f))
+		hasNot(t, string(b), "rules --team", f+" 不带规则命令")
+	}
+	e.mustRun("send", "--team", id, "--from", "O1", "--resend", "op_x/O1-000")
+	has(t, e.lastPrompt(worker), " rules --team "+id, "resend 的投递 prompt 同样带规则命令行")
+}
+
+// none 编组（无独立 Advisor）：owner 不含并行与快照规则。
+func TestNoneTeamOmitsSnapshotRules(t *testing.T) {
+	e, id, _ := sendSetup(t, false)
+	hasNot(t, e.lastPrompt(id+"_design"), "并行放行", "none 编组 owner 无并行规则")
+	hasNot(t, e.lastPrompt(id+"_execute"), "交接包要求快照时", "none 编组 worker 无快照生成规则")
 }

@@ -97,6 +97,7 @@ nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <member key> --title <title> --file <body file> [--status DONE|BLOCKED|CONTEXT_READY] [--responds-to <req>] [--reply sync|async] [--set key=value]... [--no-deliver] [--from <member key>]
 nakama send --team <id> --resend <req> [--to <member key>] [--from <member key>]
+nakama rules --team <id> [--from <member key>]
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
 nakama version [--check]
@@ -141,7 +142,7 @@ Roles deliver every business message with `nakama send` instead of a hand-writte
 - **What one send does**: it allocates the request number `<task_id>/<member key>-<sequence>` from the files already in the task directory, writes the message file, verifies the recipient's frozen identity, and delivers a prompt that holds only the header, the correlation fields and `file=<path>`. `--reply sync` waits up to 120 seconds and then prints the recipient's latest output.
 - **When the recipient is not available**: only an idle/done recipient receives input. A working recipient is waited on once for at most 60 seconds; if it is still working, blocked or unknown, or its identity drifted, nothing is sent, the command prints `delivery=NOT_SENT` and exits non-zero. The message and its number stay on disk, and `--resend <req>` delivers the same message later.
 - **Delivery states**: `SENT`; `NOT_SENT`; `UNKNOWN` (the prompt command failed in a way that cannot prove whether the input arrived — check with `herdr agent read` before resending); and `SYNC` (`--no-deliver`: a synchronous answer that is recorded but not prompted back). A delivery is recorded as `UNKNOWN` before the prompt is sent, so a killed process never leaves a possibly delivered message marked as unsent.
-- **Relays**: `--resend <req> --to <member>` run by a member other than the author forwards the message unchanged and adds `relayed_by` to the header.
+- **General forwarding**: `--resend <req> --to <member>` run by a member other than the author forwards the message unchanged and adds `relayed_by` to the header. Workers do not use this as a Worker → Advisor → Owner relay strategy.
 - **Sender**: the member whose pane is `HERDR_PANE_ID`. `--from` is only needed where that variable is missing, and must agree with it otherwise.
 - **`status`**: for each task that has a ledger it prints the message count and the open items — requests with no `DONE` answer yet (`WAITING`, `BLOCKED`, `PAUSED`) and messages whose last delivery is `NOT_SENT` or `UNKNOWN`. The view is derived from the ledger; whether a request is settled is still decided by the roles under the protocol.
 - **No lock**: `send` only reads team state and does not take the team lock. Request numbers are allocated with an exclusive hard link, so an interrupted `send` cannot leave a stale lock that blocks the team.
@@ -230,7 +231,7 @@ In `protocol.md`, the lines between `<!-- role:owner,worker -->` and `<!-- /role
 
 For architecture tasks, the `architecture` Skill (user-defined, not provided by the plugin) is read per role when installed; otherwise the original handoff contract continues and the gap is noted. The plugin does not install Skills, change role division or spawn teams. Template changes do not refresh existing role contexts; old teams that have not finished initialization remain protected by the original protocol-hash drift check, which is never bypassed by clearing state.
 
-When the user asks any role to compact its context, the automatic compaction branch of an installed [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill (a user-defined compaction Skill, not bundled with the plugin) is used; this plugin only keeps the rules connecting it to existing duties, pause/resume authorization and request state. Background control targets only the caller's own session; when not installed or unsupported by the control plane, recovery information is kept and the gap reported.
+When the user asks any role to compact its context, the automatic compaction branch of an installed [`long-task`](https://github.com/forsakesoul/awesome-skills/tree/main/long-task) Skill (a user-defined compaction Skill, not bundled with the plugin) is used; this plugin only keeps the rules connecting it to existing duties, pause/resume authorization and request state. Background control targets only the caller's own session; when not installed or unsupported by the control plane, recovery information is kept and the gap reported. The Owner and Advisor compact natively at the threshold on their own only if the project context file or the request explicitly authorizes automatic compaction; otherwise they report "threshold reached, not compacted" and the manual /compact entry.
 
 ## Tests
 

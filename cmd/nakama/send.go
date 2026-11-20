@@ -28,7 +28,7 @@ type message struct {
 	File     string            `json:"file"`
 	Delivery string            `json:"delivery"` // NOT_SENT | SENT | UNKNOWN | SYNC（同步答复，不反向投递）
 	Note     string            `json:"note,omitempty"`
-	Via      string            `json:"via,omitempty"` // 代收转交者
+	Via      string            `json:"via,omitempty"` // 转交者（通用转交）
 }
 
 const ledgerName = "ledger.jsonl"
@@ -100,23 +100,27 @@ func (a *app) appendLedger(sub string, m message) error {
 }
 
 // 任务子目录：只认状态里记录的任务目录，路径上任何一级是符号链接都拒绝（与 listTasks 一致）。
-func (a *app) taskSubdir(t *Team, task string, create bool) (string, error) {
+// created 为真仅当本次调用实际 Mkdir 成功（即新建），供调用方决定是否提示。
+func (a *app) taskSubdir(t *Team, task string, create bool) (sub string, created bool, err error) {
 	if t.TaskDir == "" || t.TaskDir != taskDirFor(t) || !realDir(filepath.Dir(t.TaskDir)) || !realDir(t.TaskDir) {
-		return "", a.fail(L("编组 %s 没有可用的任务目录；send 不可用。"), t.TeamID)
+		return "", false, a.fail(L("编组 %s 没有可用的任务目录；send 不可用。"), t.TeamID)
 	}
 	if !taskNameRe.MatchString(task) {
-		return "", a.fail(L("task_id 只能用字母、数字、点、下划线和连字符：%s"), task)
+		return "", false, a.fail(L("task_id 只能用字母、数字、点、下划线和连字符：%s"), task)
 	}
-	sub := filepath.Join(t.TaskDir, task)
+	sub = filepath.Join(t.TaskDir, task)
 	if create {
-		if err := os.Mkdir(sub, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-			return "", a.fail(L("无法创建任务目录 %s：%v"), sub, err)
+		switch merr := os.Mkdir(sub, 0o700); {
+		case merr == nil:
+			created = true
+		case !errors.Is(merr, os.ErrExist):
+			return "", false, a.fail(L("无法创建任务目录 %s：%v"), sub, merr)
 		}
 	}
 	if !realDir(sub) {
-		return "", a.fail(L("任务目录不存在：%s"), task)
+		return "", false, a.fail(L("任务目录不存在：%s"), task)
 	}
-	return sub, nil
+	return sub, created, nil
 }
 
 // 成员引用：成员键（不分大小写）或角色名。
@@ -156,6 +160,25 @@ func (a *app) senderKey(t *Team, cliFrom string) (string, error) {
 	}
 	if byPane != "" && byPane != from {
 		return "", a.fail(L("--from %s 与当前 pane 的成员 %s 不一致。"), from, byPane)
+	}
+	return from, nil
+}
+
+// 发件人：在册、已初始化且冻结身份仍匹配的成员；send 与 rules 共用。
+// pane 被别的实例占用后，不能再以原成员名义写台账、发消息或读取规则。
+func (a *app) verifiedSender(t *Team, cliFrom string) (string, error) {
+	from, err := a.senderKey(t, cliFrom)
+	if err != nil {
+		return "", err
+	}
+	sr := t.role(from)
+	if !sr.Inited || sr.Stale || sr.Identity == nil {
+		return "", a.fail(L("发件人 %s 尚未初始化。"), from)
+	}
+	if obj, msg := a.verifyIdentity(t, from, sr.Identity, false); msg != "" {
+		if _, ok := fillSession(*sr.Identity, obj.ident()); !ok {
+			return "", a.fail("%s", msg)
+		}
 	}
 	return from, nil
 }
@@ -245,7 +268,9 @@ func (a *app) deliver(t *Team, sub string, m *message, sync bool) (string, strin
 	if a.appendLedger(sub, *m) != nil {
 		return "NOT_SENT", "ledger"
 	}
-	args := []string{"agent", "prompt", r.Name, m.header() + "\nfile=" + m.File}
+	// 规则原文不在上下文时可据此重读；只进投递 prompt，不写入消息文件与台账。
+	hint := fmt.Sprintf(L("规则原文不在上下文时先运行：%s rules --team %s"), a.cliPrefix(), t.TeamID)
+	args := []string{"agent", "prompt", r.Name, m.header() + "\nfile=" + m.File + "\n" + hint}
 	if sync {
 		args = append(args, "--wait", "--timeout", "120000")
 	}
@@ -301,19 +326,9 @@ func (a *app) cmdSend(args []string) error {
 	if err != nil {
 		return a.fail("%v", err)
 	}
-	from, err := a.senderKey(t, first(v["--from"]))
+	from, err := a.verifiedSender(t, first(v["--from"]))
 	if err != nil {
 		return err
-	}
-	// 发件人也按冻结身份核验：pane 被别的实例占用后，不能再以原成员名义写台账、发消息。
-	sr := t.role(from)
-	if !sr.Inited || sr.Stale || sr.Identity == nil {
-		return a.fail(L("发件人 %s 尚未初始化。"), from)
-	}
-	if obj, msg := a.verifyIdentity(t, from, sr.Identity, false); msg != "" {
-		if _, ok := fillSession(*sr.Identity, obj.ident()); !ok {
-			return a.fail("%s", msg)
-		}
 	}
 	if req := first(v["--resend"]); req != "" {
 		for k := range v {
@@ -375,9 +390,18 @@ func (a *app) cmdSend(args []string) error {
 	if err != nil || strings.TrimSpace(string(body)) == "" {
 		return a.fail(L("正文文件为空或不可读：%s"), file)
 	}
-	sub, err := a.taskSubdir(t, task, true)
+	// 提示而不阻断：大正文与任务目录过多都会推高后续 prompt 与恢复成本。
+	sub, created, err := a.taskSubdir(t, task, true)
 	if err != nil {
 		return err
+	}
+	if len(body) > 16384 {
+		a.warnf(L("正文 %d 字节超过 16KB：正文偏长，证据类内容改传路径，结论类内容按本角色输出格式压缩。"), len(body))
+	}
+	if created {
+		if n := len(a.listTasks(t)); n >= 5 {
+			a.warnf(L("本编组已有 %d 个任务目录：交付后的新独立需求建议用户新建编组，已结任务可交由用户清理。"), n)
+		}
 	}
 	_, noDeliver := v["--no-deliver"]
 	m := message{From: from, To: to, Title: title, Fields: fields, Delivery: "NOT_SENT"}
@@ -397,13 +421,13 @@ func (a *app) cmdSend(args []string) error {
 	return a.finishSend(t, sub, &m, fields["reply"] == "sync")
 }
 
-// resend：沿用原请求号重投（重试、RESULT_REPLAY 补报）；发件人不是原作者时即代收转交，原 from 不变。
+// resend：沿用原请求号重投（重试、RESULT_REPLAY 补报）；发件人不是原作者时即为转交，原 from 不变。
 func (a *app) resend(t *Team, from, req, cliTo string) error {
 	task, inst, _ := strings.Cut(req, "/")
 	if !msgIDRe.MatchString(inst) {
 		return a.fail(L("--resend 须为完整请求号（如 op_x/W1-003）：%s"), req)
 	}
-	sub, err := a.taskSubdir(t, task, false)
+	sub, _, err := a.taskSubdir(t, task, false)
 	if err != nil {
 		return err
 	}

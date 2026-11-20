@@ -133,7 +133,7 @@ File: `config.json`. **Never commit real providers / paths / credentials.**
 ```
 
 - An engine is written as `<launcher>/<model>[:effort]`, or as a shorthand you define in `engine_map`.
-- `projects` gives a repository its team-name prefix and a project context file that every member receives at initialization.
+- `projects` gives a repository its team-name prefix and a project context file that every member receives at initialization. To let an Owner or Advisor compact natively at the threshold on its own, authorize that in this context file or in the request; otherwise it only reports the threshold and the manual /compact entry.
 - `default_profile.auto_init: true` initializes the team right after it is created or a member is added or replaced. It is off by default so that you can check each pane's model and permissions first.
 - The language of the interface and prompts is set by `NAKAMA_LANG=en|zh|ja` and otherwise follows the system locale; set it in the environment that starts Herdr.
 - Launcher details (the `pi` provider, `ccenv`, the Claude model preset) are in the [reference](docs/reference.md).
@@ -150,6 +150,7 @@ nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <member key> --title <title> --file <body file> [...]
+nakama rules --team <id> [--from <member key>]   # re-read this role's rules (read-only; after compaction or session recovery)
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
 nakama version [--check]

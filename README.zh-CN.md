@@ -133,7 +133,7 @@ nakama rebind --team <id> --confirm-anchor <新锚点 terminal>
 ```
 
 - 引擎写法是 `<launcher>/<model>[:effort]`，也可以在 `engine_map` 里定义简写。
-- `projects` 为指定仓库设置编组名前缀和项目背景文件，初始化时一并带给各成员。
+- `projects` 为指定仓库设置编组名前缀和项目背景文件，初始化时一并带给各成员。 若希望 Owner/Advisor 到阈值时自行原生压缩，请在项目上下文文件或需求中明确授权；否则它们只报告阈值与手动 /compact 入口。
 - `default_profile.auto_init: true` 会在建组、加人或换人后接着初始化。默认关闭，方便你先核对各 pane 的模型和权限。
 - 界面和提示词语言由 `NAKAMA_LANG=en|zh|ja` 决定，未设置时跟随系统语言；需设置在启动 Herdr 的环境里。
 - 各启动器的细节（`pi` 的 provider、`ccenv`、Claude 模型预设）见[参考文档](docs/reference.zh-CN.md)。
@@ -150,6 +150,7 @@ nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
 nakama clean [--team <id>] [--task <task_id>]... [--all] [--yes] [--force]
 nakama send --team <id> --task <task_id> --to <成员键> --title <标题> --file <正文文件> [...]
+nakama rules --team <id> [--from <成员键>]   # 只读重读本角色规则（压缩或会话恢复后）
 nakama down --team <id> [--yes]
 nakama resolve --team <id> --delivered | --not-delivered
 nakama version [--check]
