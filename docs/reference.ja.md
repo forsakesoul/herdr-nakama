@@ -202,8 +202,7 @@ CLI では Herdr サーバーの名前空間を証明できません。アンカ
 **Bridge との競合。** Herdr の rename には compare-and-swap の意味論がないため、読み取りと改名の間に Bridge が自動命名する可能性を数学的に排除できません。
 ずれを検出したら停止して計画を保持します。プラグインは Bridge を追いかけたり変更したりしません。成功しても名前が永久に変わらないとは限らず、その後の `init` / `prompt` は引き続き厳格なルールで検査します。
 
-**状態の互換性。** このバージョンは `schema_version: 4` を書き込みます：ロールはメンバーキー（`O1`、`W1`、`W2`、`A1`…）で管理されます。schema 1〜3 の旧状態はメモリ上で変換され、初回保存時にのみ schema 4 として書き戻されます。schema 2 で `rebind_pending` と `rebinds`（監査）、schema 3 で `task_dir`、`retired`、ロールごとの `team_update_pending` を追加しました。旧バージョンはより高い schema を読むと拒否するため、
-新しいフィールドを失った状態で上書きされることはありません。旧バージョンに戻す場合は、未完了の計画がないことを確認し、状態ファイルを自分で処理してください。schema 1〜3 は引き続き読み込め、初回の実際の書き込み時に 4 へ更新されます。
+**状態の互換性。** Nakama は旧 schema 1〜4 を読み込み、次回の保存時に `schema_version: 5` を書き込みます。schema 2 で `rebind_pending` と `rebinds`、schema 3 で `task_dir`、`retired`、ロールごとの `team_update_pending`、schema 4 で `O1` や `W1` などのメンバーキーを導入しました。旧状態の読み込み時は、当時の暗黙の Claude と Sol の既定値を明示して、再開後も元の起動パラメータを使います。旧バイナリは schema 5 を拒否します。ダウングレード前に保留中の計画を完了し、更新済みの状態ファイルは個別に扱ってください。
 
 **自動では行われないこと。** `init` と `up` は再バインドを行いません。`init` は「terminal または名前だけが変わった候補」を検出すると `明示的な rebind --team <id> が必要な可能性` を案内するだけで、
 stale にせず状態も書き込みません。`status` は読み取り専用で、記録された pane に基づいて観測し、`binding=bound|candidate|unverified` を出力して、ライフサイクルの `status` とバインドの有効性を区別します。`bound` は現在のタスク名が記録されたロール名と一致することも要求し、他者の名前や空の場合は最大でも `unverified` です。`candidate` は候補（同じ pane と kind で terminal または名前が変化）にすぎず、`rebind` がプリフライトを通過する保証はないため、まず `--preflight` で確認してください。

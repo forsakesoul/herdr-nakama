@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Qoder（native）与 cc 一样在启动几秒后才上报 session：启动取证要等到它，否则 init 会判身份漂移。
 func TestLaunchWaitsForLateSession(t *testing.T) {
@@ -29,6 +32,43 @@ func TestSlowRecognitionAndResumeAfterLaunchFailure(t *testing.T) {
 	eq(t, e2.str("phase"), "launched", "重跑 up 补取证并启动其余成员")
 	eq(t, e2.count("agent", "start"), 2, "Owner 不重复启动")
 	has(t, e2.mustRun("init", "--team", e2.teamID()), "READY", "可初始化")
+}
+
+func TestResumeUsesSavedEngineDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name, engine, launch, saved string
+		legacy                      bool
+	}{
+		{"legacy Claude", "cc", "cc --model 'claude-opus-5-5' --effort 'medium'", "cc/claude-opus-5-5:medium", true},
+		{"legacy Sol", "codex/gpt-6.1-sol[1M]", `--model gpt-6.1-sol[1M] -c model_reasoning_effort="high"`, "codex/gpt-6.1-sol[1M]:high", true},
+		{"legacy Sol explicit effort", "codex/gpt-6.1-sol:medium", `--model gpt-6.1-sol -c model_reasoning_effort="medium"`, "codex/gpt-6.1-sol:medium", true},
+		{"local Claude", "cc", "cc", "cc", false},
+		{"local Sol", "codex/gpt-6.2-sol", `--model gpt-6.2-sol -c model_reasoning_effort="medium"`, "codex/gpt-6.2-sol", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.config("codex")
+			t.Setenv("NAKAMA_FAKE_GET_FAIL", "1")
+			has(t, e.mustFail("up", "--worker", tc.engine), "Owner 启动失败", "Worker 启动前中断")
+			eq(t, e.str("roles", "W1", "engine"), tc.engine, "状态记录引擎")
+			eq(t, e.str("roles", "W1", "launched"), "false", "尚未启动 Worker")
+			if tc.legacy {
+				e.stateSet(func(m map[string]any) { m["schema_version"] = 4 })
+			}
+
+			t.Setenv("NAKAMA_FAKE_GET_FAIL", "")
+			e.mustRun("up")
+			if tc.engine == "cc" {
+				argv := e.argvOf("pane", "run", e.str("roles", "W1", "pane"))
+				eq(t, len(argv), 4, "Claude Worker 启动参数数量")
+				eq(t, argv[3], tc.launch, "Claude Worker 启动命令")
+			} else {
+				argv := e.argvOf("agent", "start", e.str("roles", "W1", "name"))
+				has(t, strings.Join(argv, " "), tc.launch, "Codex Worker 启动参数")
+			}
+			eq(t, e.str("roles", "W1", "engine"), tc.saved, "恢复后的持久化引擎")
+		})
+	}
 }
 
 func TestResolveUnknownInitPrompt(t *testing.T) {

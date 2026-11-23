@@ -268,7 +268,7 @@ func TestV2V3LegacyStateReadOnlyThenMigrates(t *testing.T) {
 		eq(t, string(fixtureBytes(t, "dm_fx0002")), string(before), "status 不写 schema 2 文件")
 	})
 
-	t.Run("v3 含 rebind_pending：只读命令不改字节，确认后恢复、done 不重发、首次写为 schema 4", func(t *testing.T) {
+	t.Run("v3 含 rebind_pending：只读命令不改字节，确认后恢复、done 不重发、首次写为 schema 5", func(t *testing.T) {
 		e := newEnv(t)
 		cwd := fixtureCWD(t, e)
 		seedV3Rows(e)
@@ -285,7 +285,7 @@ func TestV2V3LegacyStateReadOnlyThenMigrates(t *testing.T) {
 		renames := e.count("agent", "rename")
 		e.mustRun("rebind", "--team", "dm_fx0001", "--confirm-anchor", "term_new_anchor")
 		eq(t, e.count("agent", "rename")-renames, 1, "只改 worker（done 的 owner 不重发）")
-		eq(t, e.str("schema_version"), "4", "首次实际写入为 schema 4")
+		eq(t, e.str("schema_version"), "5", "首次实际写入为 schema 5")
 		eq(t, e.str("roles", "W2", "identity", "session"), "sess-worker", "非首实例 W2 迁移后确认生效")
 		eq(t, e.str("rebind_pending"), "<nil>", "计划已提交")
 		has(t, string(fixtureBytes(t, "dm_fx0001")), `"W2:session"`, "旧 worker:session 迁移为 W2:session")

@@ -202,8 +202,7 @@ CLI 无法证明 Herdr server 命名空间；锚点证据是 `pane get` 的 work
 **与 Bridge 的竞争。** Herdr 的 rename 没有比较并交换语义，读取与改名之间无法从数学上排除 Bridge 的自动命名。
 检测到漂移时停止，计划保留；插件不追逐、不修改 Bridge。成功不代表名称永久不变，之后的 `init` / `prompt` 仍按严格规则检查。
 
-**状态兼容。** 本版本写出 `schema_version: 4`：角色以成员键（`O1`、`W1`、`W2`、`A1`…）为索引；schema 1–3 的旧状态在内存中转换，只有首次保存时才写回为 schema 4。schema 2 新增 `rebind_pending` 与 `rebinds`（审计），schema 3 新增 `task_dir`、`retired` 与角色的 `team_update_pending`。旧版本读到更高的 schema 即拒绝，
-因此不会在丢失新字段的情况下覆盖状态；要回到旧版本，需先确认没有未完成的计划并自行处理状态文件。schema 1–3 仍可读取，首次实际写入时升级为 4。
+**状态兼容。** Nakama 可读旧 schema 1–4，下次保存时写为 `schema_version: 5`。schema 2 新增 `rebind_pending` 和 `rebinds`，schema 3 新增 `task_dir`、`retired` 和角色的 `team_update_pending`，schema 4 引入 `O1`、`W1` 等成员键。读取旧状态时，Nakama 会把当时隐含的 Claude 和 Sol 默认值展开为显式引擎配置，恢复启动时沿用原参数。旧二进制拒绝 schema 5。降级前先完成未结计划，并单独处理已升级的状态文件。
 
 **不会自动发生。** `init` 与 `up` 不执行重绑；`init` 在检测到“仅 terminal 或名称变化的候选”时只提示 `可能需要显式 rebind --team <id>`，
 不标 stale、不写状态。`status` 只读，按记录 pane 观测，输出 `binding=bound|candidate|unverified`，并区分生命周期 `status` 与绑定是否有效。`bound` 还要求当前任务名等于记录的角色名；名称为他人名或为空时至多 `unverified`。`candidate` 只是候选（同 pane 与 kind，terminal 或名称已变），不保证 `rebind` 能通过预检，需先 `--preflight` 核对。
