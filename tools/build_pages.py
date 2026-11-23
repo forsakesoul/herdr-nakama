@@ -15,8 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs/index.html"
 REPO = "https://github.com/forsakesoul/herdr-nakama"
 INSTALL = """herdr plugin install forsakesoul/herdr-nakama
-cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
-[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && \\
+cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.local.json"
+[ -e "$cfg" ] || [ -e "${cfg%/*}/config.json" ] || (umask 077 && mkdir -p "${cfg%/*}" && \\
   curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")"""
 KEYS = """[[keys.command]]
 key = "prefix+u"

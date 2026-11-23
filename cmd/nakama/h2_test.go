@@ -169,7 +169,7 @@ const v3TeamJSON = `{
  "anchor": {"pane_id": "w0:p1", "workspace_id": "w0", "tab_id": "w0:t1", "cwd": %[1]q, "terminal_id": "term_w0:p1", "identity": null},
  "cwd": %[1]q,
  "roles": {
-  "owner": {"name": "dm_fx0001_design", "pane": "w0:p10", "engine": "codex/gpt-6.1-sol:high", "instance": 1, "launched": true, "inited": true, "pane_terminal": "term_w0:p10", "launch_identity": null,
+  "owner": {"name": "dm_fx0001_design", "pane": "w0:p10", "engine": "codex/gpt-6.2-sol:high", "instance": 1, "launched": true, "inited": true, "pane_terminal": "term_w0:p10", "launch_identity": null,
             "identity": {"terminal_id": "term_w0:p10", "pane_id": "w0:p10", "kind": "codex", "session": "sess-owner"}},
   "worker": {"name": "dm_fx0001_execute2", "pane": "w0:p12", "engine": "pi/model-x:low", "instance": 2, "launched": true, "inited": true, "pane_terminal": "term_w0:p12", "launch_identity": null,
              "identity": {"terminal_id": "term_w0:p12", "pane_id": "w0:p12", "kind": "pi", "session": ""}},
@@ -206,7 +206,7 @@ const v2TeamJSON = `{
  "anchor": {"pane_id": "w0:p1", "workspace_id": "w0", "tab_id": "w0:t1", "cwd": %[1]q, "terminal_id": "term_w0:p1", "identity": null},
  "cwd": %[1]q,
  "roles": {
-  "owner": {"name": "dm_fx0002_design", "pane": "w0:p10", "engine": "codex/gpt-6.1-sol:high", "instance": 1, "launched": true, "inited": true, "pane_terminal": "term_w0:p10", "launch_identity": null,
+  "owner": {"name": "dm_fx0002_design", "pane": "w0:p10", "engine": "codex/gpt-6.2-sol:high", "instance": 1, "launched": true, "inited": true, "pane_terminal": "term_w0:p10", "launch_identity": null,
             "identity": {"terminal_id": "term_w0:p10", "pane_id": "w0:p10", "kind": "codex", "session": "sess-owner"}},
   "worker": {"name": "dm_fx0002_execute", "pane": "w0:p11", "engine": "pi/model-x:low", "instance": 1, "launched": true, "inited": true, "pane_terminal": "term_w0:p11", "launch_identity": null,
              "identity": {"terminal_id": "term_w0:p11", "pane_id": "w0:p11", "kind": "pi", "session": ""}},

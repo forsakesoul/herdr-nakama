@@ -367,12 +367,12 @@ func (e *tenv) config(kind string) {
 	proj := fmt.Sprintf(`{ "demo-repo": { "prefix": "dm", "context_file": %q, "trigger": ";dm.ctx" } }`, e.ctx)
 	cfg := map[string]string{
 		"normal": `{ "default_profile": { "owner": "sol", "worker": "ds", "advisor": "none", "pi_provider": "demo-provider",
-  "engine_map": { "sol": "codex/gpt-6.1-sol:high", "ds": { "owner": "pi/model-x:low", "worker": "pi/model-x:low", "advisor": "pi/model-x:high" }, "cc": "cc" } },
+  "engine_map": { "sol": "codex/gpt-6.2-sol:high", "ds": { "owner": "pi/model-x:low", "worker": "pi/model-x:low", "advisor": "pi/model-x:high" }, "cc": "cc" } },
   "projects": ` + proj + ` }`,
-		"codex":     `{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "codex/gpt-6.1-luna:medium", "advisor": "none" }, "projects": {} }`,
-		"noproj":    `{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "codex/gpt-6.1-sol:medium", "advisor": "none" }, "projects": {} }`,
-		"badctx":    fmt.Sprintf(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "codex/gpt-6.1-sol:medium", "advisor": "none" }, "projects": { "demo-repo": { "prefix": "dm", "context_file": %q, "trigger": ";dm.ctx" } } }`, filepath.Join(e.root, "missing.md")),
-		"badprefix": fmt.Sprintf(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "codex/gpt-6.1-sol:medium", "advisor": "none" }, "projects": { "demo-repo": { "prefix": "Bad_Name", "context_file": %q, "trigger": ";dm.ctx" } } }`, e.ctx),
+		"codex":     `{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "codex/gpt-6.1-luna:medium", "advisor": "none" }, "projects": {} }`,
+		"noproj":    `{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "codex/gpt-6.2-sol:medium", "advisor": "none" }, "projects": {} }`,
+		"badctx":    fmt.Sprintf(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "codex/gpt-6.2-sol:medium", "advisor": "none" }, "projects": { "demo-repo": { "prefix": "dm", "context_file": %q, "trigger": ";dm.ctx" } } }`, filepath.Join(e.root, "missing.md")),
+		"badprefix": fmt.Sprintf(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "codex/gpt-6.2-sol:medium", "advisor": "none" }, "projects": { "demo-repo": { "prefix": "Bad_Name", "context_file": %q, "trigger": ";dm.ctx" } } }`, e.ctx),
 		"ccenv":     fmt.Sprintf(`{ "default_profile": { "owner": "ccenv/model-x", "worker": "cc", "advisor": "none", "cc_env_file": %q }, "projects": %s }`, e.ccEnvPath, proj),
 		"piowner":   `{ "default_profile": { "owner": "pi/model-x:low", "worker": "codex/gpt-6.1-luna:medium", "advisor": "none", "pi_provider": "demo-provider" }, "projects": {} }`,
 	}[kind]
@@ -383,7 +383,7 @@ func (e *tenv) rawConfig(s string) {
 	e.t.Helper()
 	dir := os.Getenv("HERDR_PLUGIN_CONFIG_DIR")
 	os.MkdirAll(dir, 0o755)
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(s), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.local.json"), []byte(s), 0o644); err != nil {
 		e.t.Fatal(err)
 	}
 }

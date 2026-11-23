@@ -33,9 +33,9 @@ https://github.com/user-attachments/assets/f2b21f2f-da61-4832-9113-158efeb8f4ec
 ```sh
 # 1. 安装（会执行 manifest 中的构建）；本地开发改用：go build … && herdr plugin link "$PWD" --enabled
 herdr plugin install forsakesoul/herdr-nakama
-# 2. 私有配置：仅在不存在时以 config.example.json 为模板生成（0600），再按需填写 pi_provider / cc_env_file（私有，勿入库）
-cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
-[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
+# 2. 私有配置：两个配置文件都不存在时，从示例生成 config.local.json（0600）。模型别名、pi_provider 和 cc_env_file 在本地填写。
+cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.local.json"
+[ -e "$cfg" ] || [ -e "${cfg%/*}/config.json" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
 # 3. 绑定快捷键（追加到 ~/.config/herdr/config.toml）后重载配置
 herdr server reload-config
 ```
@@ -115,22 +115,7 @@ nakama rebind --team <id> --confirm-anchor <新锚点 terminal>
 ## 配置
 
 配置目录：`$HERDR_PLUGIN_CONFIG_DIR`（Herdr 注入），否则 `${XDG_CONFIG_HOME:-$HOME/.config}/nakama`。
-文件：`config.json`。**不要把真实 provider / 路径 / 凭据提交进仓库**。
-
-```json
-{
-  "default_profile": {
-    "owner": "sol",
-    "worker": "ds",
-    "advisor": "none",
-    "engine_map": { "sol": "codex/<model>:high", "ds": { "owner": "pi/<model>:low", "worker": "pi/<model>:low", "advisor": "pi/<model>:high" } },
-    "cc_env_file": ""
-  },
-  "projects": {
-    "<repo-name>": { "prefix": "<short>", "context_file": "/abs/project-context.md", "trigger": ";xx.ctx" }
-  }
-}
-```
+将 [config.example.json](config.example.json) 复制到该目录下的 `config.local.json`，在本地填写角色默认值、模型别名、provider 和路径。缺少 `config.local.json` 时，Nakama 会读取同目录下已有的 `config.json`。
 
 - 引擎写法是 `<launcher>/<model>[:effort]`，也可以在 `engine_map` 里定义简写。
 - `projects` 为指定仓库设置编组名前缀和项目背景文件，初始化时一并带给各成员。 若希望 Owner/Advisor 到阈值时自行原生压缩，请在项目上下文文件或需求中明确授权；否则它们只报告阈值与手动 /compact 入口。

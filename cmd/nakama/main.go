@@ -95,8 +95,8 @@ const usageText = `nakama — Herdr 原生编组插件（Owner / Worker / Adviso
   nakama version [--check]                                                   # 显示版本；--check 同时查询最新发布
   nakama update [--check] [--yes]                                            # 升级到最新发布
 
-引擎写法：<launcher>/<model>[:effort]，或 config.json 中 default_profile.engine_map 的简写。
-配置：$HERDR_PLUGIN_CONFIG_DIR/config.json，或 ${XDG_CONFIG_HOME:-$HOME/.config}/nakama/config.json
+引擎写法：<launcher>/<model>[:effort]，或 config.local.json 中 default_profile.engine_map 的简写。
+配置：$HERDR_PLUGIN_CONFIG_DIR/config.local.json，或 ${XDG_CONFIG_HOME:-$HOME/.config}/nakama/config.local.json
 `
 
 func (a *app) dispatch(args []string) error {

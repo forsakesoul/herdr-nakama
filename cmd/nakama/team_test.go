@@ -210,7 +210,7 @@ func TestNaming(t *testing.T) { // F1: task_ 前缀 / 名称预校验 / 换行 p
 	eq(t, e.count("pane", "split"), 0, "非法名零副作用（0 split）")
 
 	e = newEnv(t)
-	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "codex/gpt-6.1-sol:medium", "advisor": "none" }, "projects": { "demo-repo": { "prefix": "dm\nx", "context_file": "` + e.ctx + `", "trigger": ";dm.ctx" } } }`)
+	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "codex/gpt-6.2-sol:medium", "advisor": "none" }, "projects": { "demo-repo": { "prefix": "dm\nx", "context_file": "` + e.ctx + `", "trigger": ";dm.ctx" } } }`)
 	e.mustFail("up")
 	eq(t, e.count("pane", "split"), 0, "换行 prefix 0 split")
 }
@@ -279,7 +279,7 @@ func TestInitAfterBridgeAutoName(t *testing.T) {
 				if timing == "before-capture" {
 					t.Setenv("NAKAMA_FAKE_MANUAL_NAME", "proj-e2d2")
 				}
-				e.mustRun("up", "--owner", "codex/gpt-6.1-sol:high", "--worker", launcher)
+				e.mustRun("up", "--owner", "codex/gpt-6.2-sol:high", "--worker", launcher)
 				wp := e.str("roles", "W1", "pane")
 				eng, _ := parseEngine(launcher)
 				// Bridge autoNameFor(".../proj", "term_w0:p11") 的独立固定样本。
@@ -935,7 +935,7 @@ func TestNativeDelayedBlocked(t *testing.T) { // R1：native 的首次有效观�
 
 func TestCcFirstObservationBlocked(t *testing.T) { // R1：手动引擎首次观测即 blocked 且 POLL_TRIES=1 时仍须等授权，不得冻结空 session
 	e := newEnv(t)
-	e.rawConfig(`{"default_profile":{"owner":"cc","worker":"codex/gpt-6.1-sol:high","advisor":"none"},"projects":{}}`)
+	e.rawConfig(`{"default_profile":{"owner":"cc","worker":"codex/gpt-6.2-sol:high","advisor":"none"},"projects":{}}`)
 	t.Setenv("NAKAMA_START_POLL_TRIES", "1")
 	t.Setenv("NAKAMA_FAKE_STATUS_SEQ", "unknown,blocked,idle")
 	t.Setenv("NAKAMA_FAKE_LATE_SESSION", "sess-after-authorization")
@@ -945,7 +945,7 @@ func TestCcFirstObservationBlocked(t *testing.T) { // R1：手动引擎首次观
 
 func TestSharedAuthorizationDeadline(t *testing.T) { // R2：同一角色的授权预算只有一份；中间的 unknown 不重置预算，提示只出现一次
 	e := newEnv(t)
-	e.rawConfig(`{"default_profile":{"owner":"cc","worker":"codex/gpt-6.1-sol:high","advisor":"none"},"projects":{}}`)
+	e.rawConfig(`{"default_profile":{"owner":"cc","worker":"codex/gpt-6.2-sol:high","advisor":"none"},"projects":{}}`)
 	t.Setenv("NAKAMA_START_WAIT_SECONDS", "1")
 	t.Setenv("NAKAMA_FAKE_STATUS_SEQ", "blocked,blocked,blocked,blocked,unknown,blocked,blocked,blocked,blocked,idle")
 	t.Setenv("NAKAMA_FAKE_LATE_SESSION", "sess-after-authorization")

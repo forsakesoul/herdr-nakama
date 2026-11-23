@@ -33,9 +33,9 @@ macOS と Herdr 0.9.3 以降が必要です。下のインストールコマン�
 ```sh
 # 1. インストール（manifest のビルドが実行されます）。ローカル開発時は：go build … && herdr plugin link "$PWD" --enabled
 herdr plugin install forsakesoul/herdr-nakama
-# 2. 非公開設定：存在しない場合のみ config.example.json から生成（0600）し、必要に応じて pi_provider / cc_env_file を記入（非公開、コミット禁止）
-cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
-[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
+# 2. 非公開設定：両方の設定ファイルがなければ、例から config.local.json を作成（0600）。モデルの別名、pi_provider、cc_env_file はここで設定します。
+cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.local.json"
+[ -e "$cfg" ] || [ -e "${cfg%/*}/config.json" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
 # 3. キーバインドを ~/.config/herdr/config.toml に追記して設定を再読み込み
 herdr server reload-config
 ```
@@ -115,22 +115,7 @@ nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal>
 ## 設定
 
 設定ディレクトリ：`$HERDR_PLUGIN_CONFIG_DIR`（Herdr が注入）、なければ `${XDG_CONFIG_HOME:-$HOME/.config}/nakama`。
-ファイル：`config.json`。**実際の provider / パス / 認証情報をリポジトリにコミットしないでください。**
-
-```json
-{
-  "default_profile": {
-    "owner": "sol",
-    "worker": "ds",
-    "advisor": "none",
-    "engine_map": { "sol": "codex/<model>:high", "ds": { "owner": "pi/<model>:low", "worker": "pi/<model>:low", "advisor": "pi/<model>:high" } },
-    "cc_env_file": ""
-  },
-  "projects": {
-    "<repo-name>": { "prefix": "<short>", "context_file": "/abs/project-context.md", "trigger": ";xx.ctx" }
-  }
-}
-```
+[config.example.json](config.example.json) をこのディレクトリの `config.local.json` にコピーし、ロールの既定値、モデルの別名、provider、ローカルパスを設定します。`config.local.json` がなければ、同じディレクトリの既存の `config.json` を読み込みます。
 
 - エンジンは `<launcher>/<model>[:effort]` の形式か、`engine_map` に定義した短縮名で指定します。
 - `projects` では、リポジトリごとにチーム名の接頭辞と、初期化時に全メンバーへ渡すプロジェクト背景ファイルを設定します。 Owner/Advisor が閾値に達したときに自分でネイティブ圧縮するには、プロジェクトのコンテキストファイルまたは依頼でその許可を明示してください。明示がない場合は、閾値に達したことと手動の /compact の入口を報告するだけです。

@@ -45,28 +45,13 @@ herdr plugin action list --plugin forsakesoul.nakama
 ## 配置
 
 配置目录：`$HERDR_PLUGIN_CONFIG_DIR`（Herdr 注入），否则 `${XDG_CONFIG_HOME:-$HOME/.config}/nakama`。
-文件：`config.json`。**不要把真实 provider / 路径 / 凭据提交进仓库**。
-
-```json
-{
-  "default_profile": {
-    "owner": "sol",
-    "worker": "ds",
-    "advisor": "none",
-    "engine_map": { "sol": "codex/<model>:high", "ds": { "owner": "pi/<model>:low", "worker": "pi/<model>:low", "advisor": "pi/<model>:high" } },
-    "cc_env_file": ""
-  },
-  "projects": {
-    "<repo-name>": { "prefix": "<short>", "context_file": "/abs/project-context.md", "trigger": ";xx.ctx" }
-  }
-}
-```
+将 [config.example.json](../config.example.json) 复制到该目录下的 `config.local.json`，在本地填写角色默认值、模型别名、provider 和路径。缺少 `config.local.json` 时，Nakama 会读取同目录下已有的 `config.json`。
 
 - **语言**：CLI 输出与 agent 提示词按 `NAKAMA_LANG=en|zh|ja` 选择，未设置时依次看 `LC_ALL` / `LC_MESSAGES` / `LANG`（`zh*`、`ja*`），否则为英文。该变量由插件进程读取，需设置在启动 Herdr 的环境里。`up` 与 `init` 须使用同一语言：各语言提示词不同，中途切换会被当作 protocol hash 漂移而拒绝。
 - 参数优先级：CLI > `default_profile` > 内置中立默认（缺配置则报错，不内置个人 provider）。
 - **`auto_init`**：`default_profile.auto_init: true` 时，`up`（新建编组）与 `add` / `swap` 在启动成功后先释放自己的锁，再接着执行 `init`。默认关闭：分两步是为了让你在任何 prompt 发出前先核对各 pane 的模型和权限。用 `up` 恢复的半组不会自动初始化。
 - 引擎写法：`<launcher>/<model>[:effort]`，或 `engine_map` 的简写。
-- `cc` 不写 model 时默认 `claude-opus-5-5` + `medium`（即 `cc --model claude-opus-5-5 --effort medium`）；写了 model 而未写 effort 时不传 `--effort`，交给 Claude 自己的默认值。
+- 本地未配置 `cc` 别名时，直接输入 `cc` 会使用本机 Claude Code 的默认模型和 effort。`cc/<model>` 指定模型，effort 由 Claude 决定，也可显式指定。Codex 和 Pi 省略 effort 时使用 `medium`。
 - **provider**：`pi` 角色的 provider 由 `default_profile.pi_provider` 提供（私有，勿入库）；缺则 `up` 在任何 split 之前拒绝。
 - **`ccenv` 启动器**：先在 pane 里 `source` 一个 env 文件（例如设置 `ANTHROPIC_BASE_URL` 等指向自建网关），再启动 `cc --model <model>`；`model` 必填、不接受 effort。`default_profile.cc_env_file` 指向本机普通可读文件；`up` 前校验（`-f` 且 `-r`，不读内容、不打印值），目录路径即拒绝。source 失败（含 `return` 非零）时保留非零、不启动 `cc`。启动时该路径会出现在**对应 panes 的命令文本**里（路径不是密钥），env 文件**内容**绝不会被拼入命令/状态/prompt/日志。
 - `projects` 表只**引用**上下文文件路径，不复制正文；文件缺失/不可读时 `init` 停止。
@@ -76,9 +61,9 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 参考 [Claude 模型选择指南](https://claude.dev/blog/which-claude-model-should-you-build-with/)（2026-11-09），结合本项目 Owner / Worker / Advisor 分工：Owner 与 Advisor 用 Opus / medium 负责设计裁决和审查，日常 Worker 按本项目偏好用 Haiku / medium。指南对明确范围的编码推荐 Sonnet；这里以 Haiku 为日常起点，必须保留完整验证，复杂任务在建组前评估 Sonnet / Opus。
 
-将 `config.example.json` 中的 `engine_map.claude` 合入上述 Herdr 插件配置后，在目标 pane 按 `prefix+u`，为 Owner / Worker / Advisor 分别填 `claude`，确认摘要后建组；启动核对完成再按 `prefix+i` 初始化。通过插件选择界面使用，保持配置与状态目录一致。
+将 `config.example.json` 中的 `default_profile.engine_map.claude` 合入上述 Herdr 插件配置后，在目标 pane 按 `prefix+u`，为 Owner / Worker / Advisor 分别填 `claude`，确认摘要后建组；启动核对完成再按 `prefix+i` 初始化。通过插件选择界面使用，保持配置与状态目录一致。
 
-这是可选预设，不更改现有默认角色或私有配置；`cc` 仍为 Opus 5.5 / medium，Worker 展开为 `cc/haiku:medium`，`haiku` 模型别名跟随本机 Claude Code，启动后需核对实际模型与 effort。无需独立审查时在 Advisor 栏填 `none`。已明确需要更强执行模型时在 Worker 栏填 `cc/sonnet:medium` 或 `cc/opus:medium`；`ccenv` 仍不接受 effort，网关和 Pi 的模型、参数及可用性按实际 provider 核对。
+输入 `claude` 即可为该角色使用此预设，启动后核对实际模型与 effort。无需独立审查时在 Advisor 栏填 `none`。需要更强的执行模型时，可在 Worker 栏填 `cc/sonnet:medium` 或 `cc/opus:medium`。网关和 Pi 的模型可用性按实际 provider 核对。
 
 失败验证、模型升级及调整授权遵循[共享协议中的 Claude 规则](../prompts/zh/protocol.md)。在册实例的引擎保持冻结；需要调整时，在安全停点交接后替换该角色实例（见「中途增减与替换角色」），或按协议在新 pane 建组。
 

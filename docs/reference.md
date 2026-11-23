@@ -45,28 +45,13 @@ Maintainers: to release, change `version` in `herdr-plugin.toml` in a PR. After 
 ## Configuration
 
 Config directory: `$HERDR_PLUGIN_CONFIG_DIR` (injected by Herdr), otherwise `${XDG_CONFIG_HOME:-$HOME/.config}/nakama`.
-File: `config.json`. **Never commit real providers / paths / credentials.**
-
-```json
-{
-  "default_profile": {
-    "owner": "sol",
-    "worker": "ds",
-    "advisor": "none",
-    "engine_map": { "sol": "codex/<model>:high", "ds": { "owner": "pi/<model>:low", "worker": "pi/<model>:low", "advisor": "pi/<model>:high" } },
-    "cc_env_file": ""
-  },
-  "projects": {
-    "<repo-name>": { "prefix": "<short>", "context_file": "/abs/project-context.md", "trigger": ";xx.ctx" }
-  }
-}
-```
+Copy [config.example.json](../config.example.json) to `config.local.json` in that directory. Set role defaults, model aliases, provider and local paths there. If `config.local.json` is missing, Nakama reads the existing `config.json`.
 
 - **Language**: CLI output and agent prompts follow `NAKAMA_LANG=en|zh|ja`, otherwise `LC_ALL` / `LC_MESSAGES` / `LANG` (`zh*`, `ja*`), otherwise English. The variable is read by the plugin process, so set it in the environment Herdr is started from. Use the same language for `up` and `init`: prompts differ per language, so switching in between is refused as a protocol hash drift.
 - Precedence: CLI > `default_profile` > built-in neutral defaults (missing config is an error; no personal provider is built in).
 - **`auto_init`**: with `default_profile.auto_init: true`, `up` (for a newly created team) and `add` / `swap` run `init` right after the launch succeeds, releasing their locks first. It is off by default: the two-step flow exists so that you can check each pane's model and permissions before any prompt is sent. A half-built team resumed with `up` is not initialized automatically.
 - Engine syntax: `<launcher>/<model>[:effort]`, or an `engine_map` shorthand.
-- `cc` without a model defaults to `claude-opus-5-5` + `medium` (i.e. `cc --model claude-opus-5-5 --effort medium`); with a model but no effort, `--effort` is omitted and Claude's own default applies.
+- `cc` without a configured alias uses your local Claude Code defaults. `cc/<model>` selects a model and leaves effort to Claude unless you specify it. Codex and Pi use `medium` when effort is omitted.
 - **provider**: the provider for `pi` roles comes from `default_profile.pi_provider` (private, never commit); if missing, `up` refuses before any split.
 - **`ccenv` launcher**: sources an env file in the pane (e.g. setting `ANTHROPIC_BASE_URL` to point at your own gateway), then starts `cc --model <model>`; `model` is required and effort is not accepted. `default_profile.cc_env_file` must point to a regular readable file on this machine; it is checked before `up` (`-f` and `-r`, content is never read or printed), and directories are rejected. If sourcing fails (including a non-zero `return`), the non-zero status is kept and `cc` is not started. The path appears in the **command text of the corresponding panes** (a path is not a secret); the env file's **content** is never put into commands / state / prompts / logs.
 - The `projects` table only **references** context file paths and never copies their content; `init` stops if a file is missing or unreadable.
@@ -76,9 +61,9 @@ File: `config.json`. **Never commit real providers / paths / credentials.**
 
 Based on the [Claude model selection guide](https://claude.dev/blog/which-claude-model-should-you-build-with/) (2026-11-09), keep Owners and Advisors on Opus / medium for design decisions and review. This project's preference is Haiku / medium for routine Workers. The guide recommends Sonnet for scoped coding; starting on Haiku here still requires full verification, with Sonnet / Opus assessed before creating a team for complex work.
 
-Merge `engine_map.claude` from `config.example.json` into the Herdr plugin config described above. In the target pane press `prefix+u`, enter `claude` for Owner / Worker / Advisor and confirm the summary to create the team. Check the launches, then press `prefix+i` to initialize. Use the plugin picker to keep the config and state directories consistent.
+Merge `default_profile.engine_map.claude` from `config.example.json` into the Herdr plugin config described above. In the target pane press `prefix+u`, enter `claude` for Owner / Worker / Advisor and confirm the summary to create the team. Check the launches, then press `prefix+i` to initialize. Use the plugin picker to keep the config and state directories consistent.
 
-This optional preset leaves existing role defaults and private config untouched. `cc` remains Opus 5.5 / medium; the Worker resolves to `cc/haiku:medium`. The `haiku` alias follows local Claude Code, so check the actual model and effort after launch. Enter `none` for Advisor without independent review. For a known harder task, enter `cc/sonnet:medium` or `cc/opus:medium` for Worker. `ccenv` still rejects effort; verify gateway and Pi models, parameters and availability against the actual provider.
+This optional preset is selected by entering `claude` for a role. Check the actual model and effort after launch. Enter `none` for Advisor without independent review. For a known harder task, enter `cc/sonnet:medium` or `cc/opus:medium` for Worker. Verify gateway and Pi model availability with the provider.
 
 Follow the [shared protocol's Claude rules](../prompts/en/protocol.md) for failure verification, model escalation and adjustment authorization. Instances on a team keep their frozen engines; when adjustment is needed, hand off at a safe stop and replace that role instance (see "Changing roles mid-task"), or create a team in a new pane under that protocol.
 

@@ -97,9 +97,9 @@ func TestPickCreatesTeamFromPickedEngines(t *testing.T) { // b
 	if !ok {
 		t.Fatalf("应成功：\n%s", out)
 	}
-	has(t, out, "Owner   codex/gpt-6.1-sol:high", "摘要")
+	has(t, out, "Owner   codex/gpt-6.2-sol:high", "摘要")
 	has(t, out, "Worker  pi/model-x:low", "摘要按角色展开对象别名")
-	eq(t, e.str("roles", "O1", "engine"), "codex/gpt-6.1-sol:high", "Owner 引擎=摘要")
+	eq(t, e.str("roles", "O1", "engine"), "codex/gpt-6.2-sol:high", "Owner 引擎=摘要")
 	eq(t, e.str("roles", "W1", "engine"), "pi/model-x:low", "Worker 引擎=摘要")
 	eq(t, e.str("anchor", "pane_id"), "w0:p1", "锚点来自 env 而非 HERDR_PANE_ID")
 	eq(t, e.argvOf("pane", "split", "--pane")[3], "w0:p1", "split 到锚点")
@@ -115,12 +115,12 @@ func TestPickCreatesTeamFromPickedEngines(t *testing.T) { // b
 	e = newEnv(t)
 	e.config("normal")
 	e.anchorEnv(t)
-	ok, out = e.pick("codex/gpt-6.1-luna:medium\ncodex/gpt-6.1-sol\n\nnone\nyes\n")
+	ok, out = e.pick("codex/gpt-6.1-luna:medium\ncodex/gpt-6.2-sol\n\nnone\nyes\n")
 	if !ok {
 		t.Fatalf("完整写法应成功：\n%s", out)
 	}
 	eq(t, e.str("roles", "O1", "engine"), "codex/gpt-6.1-luna:medium", "完整写法 Owner")
-	eq(t, e.str("roles", "W1", "engine"), "codex/gpt-6.1-sol", "完整写法 Worker")
+	eq(t, e.str("roles", "W1", "engine"), "codex/gpt-6.2-sol", "完整写法 Worker")
 	eq(t, e.str("roles", "A1"), "<nil>", "Advisor none")
 }
 
@@ -187,7 +187,7 @@ func TestPickExistingTeamShowsFrozenEngines(t *testing.T) { // e
 		t.Fatalf("应正常退出：\n%s", out)
 	}
 	has(t, out, e.teamID(), "显示现有组")
-	has(t, out, "codex/gpt-6.1-sol:high", "显示冻结引擎")
+	has(t, out, "codex/gpt-6.2-sol:high", "显示冻结引擎")
 	has(t, out, "选择 [回车关闭]", "进入管理菜单")
 	hasNot(t, out, "引擎 [默认", "不再询问")
 	eq(t, e.count("pane", "split"), splits, "零新增副作用")
@@ -417,7 +417,7 @@ func TestPickDeclineReachesConfirmAndCancels(t *testing.T) {
 // R2：回车取到的默认值不可识别时，与手输一样给出错误并重问；EOF 结束循环，不死循环。
 func TestPickEnterDefaultIsValidatedLikeTypedInput(t *testing.T) {
 	e := newEnv(t)
-	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
+	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
 	e.anchorEnv(t)
 	withTTY(t, true)
 	ok, out := e.pick("\n\ncodex/gpt-6.1-luna:medium\n\nnone\ny\n")
@@ -428,7 +428,7 @@ func TestPickEnterDefaultIsValidatedLikeTypedInput(t *testing.T) {
 	eq(t, e.str("roles", "W1", "engine"), "codex/gpt-6.1-luna:medium", "重问后手输的值生效")
 
 	e2 := newEnv(t)
-	e2.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
+	e2.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "bogus words", "advisor": "none" }, "projects": {} }`)
 	e2.anchorEnv(t)
 	withTTY(t, true)
 	ok, _ = e2.pick("\n\n")
