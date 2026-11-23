@@ -106,6 +106,8 @@ nakama rebind --team <id> --confirm-anchor <新锚点 terminal>
 
 按预检输出的提示补充确认参数。恢复的是原来那支队伍，各成员保留原有对话。拒绝条件和部分失败后的处理见[参考文档](docs/reference.zh-CN.md)。
 
+若某个 Worker 或 Advisor 已无法找回（pane 已关闭，或会话已换成另一个），预检会拒绝并提示加上 `--retire <成员键>`：它在同一次重绑中停用这些成员（pane 保留），其余成员照常重绑。之后可用 `add` 补人。
+
 也可以在编组任一 pane 按 `prefix+u` 选 `b`：它显示同样的预检结果，确认后按观测到的值重绑。
 
 ## 任务记录
@@ -129,7 +131,7 @@ nakama rebind --team <id> --confirm-anchor <新锚点 terminal>
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <成员键|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <成员键|anchor>=<session>]... [--confirm-anchor <terminal>] [--retire <成员键>]...
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]

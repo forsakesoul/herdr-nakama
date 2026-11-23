@@ -544,3 +544,98 @@ func TestStateSchemaCompatibility(t *testing.T) {
 		has(t, e.mustFail("status", "--team", id), "校验失败", "拒绝未知 schema")
 	})
 }
+
+// retireSetup：两个 Worker 的稳定组（owner codex，worker pi），三个成员的 session 都已回填。
+func retireSetup(t *testing.T) (*tenv, string) {
+	t.Helper()
+	e := newEnv(t)
+	t.Setenv("NAKAMA_FAKE_RENAME_INPLACE", "1")
+	e.config("normal")
+	e.mustRun("up", "--workers", "2")
+	id := e.teamID()
+	e.mustRun("init", "--team", id)
+	for rn, sess := range map[string]string{"W1": "sess-w1", "W2": "sess-w2"} {
+		e.rowSet(e.str("roles", rn, "name"), e.str("roles", rn, "pane"), e.str("roles", rn, "identity", "terminal_id"), "pi", sess)
+	}
+	e.rowSet(e.str("roles", "O1", "name"), e.str("roles", "O1", "pane"), e.str("roles", "O1", "identity", "terminal_id"), "codex", "sess-owner")
+	e.mustRun("init", "--team", id)
+	eq(t, e.str("phase"), "initialized", "setup 应得到稳定组")
+	return e, id
+}
+
+// 重启后一个 Worker 的 pane 已不存在：不带 --retire 时整组拒绝并提示；带 --retire 时停用它，其余成员照常重绑。
+// 重启后锚点 terminal 已变，drop 无法单独执行，所以这是找回编组的唯一路径。
+func TestRebindRetiresLostMember(t *testing.T) {
+	e, id := retireSetup(t)
+	w2Name, w2Pane := e.str("roles", "W2", "name"), e.str("roles", "W2", "pane")
+	restart(e, restartOpt{})
+	e.rowDel(w2Name)
+	e.rowDel("@" + w2Pane)
+	t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
+	before, renames, rev := readState(t, e), e.count("agent", "rename"), e.str("team_rev")
+
+	ok, out := e.run("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
+	if ok {
+		t.Fatalf("W2 不可观测时应拒绝：\n%s", out)
+	}
+	has(t, out, "--retire W2", "提示可停用丢失的成员")
+	eq(t, string(readState(t, e)), string(before), "拒绝时状态字节不变")
+	eq(t, e.count("agent", "rename"), renames, "拒绝时零 rename")
+
+	out = e.mustRun("rebind", "--team", id, "--confirm-anchor", "term_new_anchor", "--retire", "W2")
+	has(t, out, "init --team", "提示投递 [TEAM_UPDATE]")
+	eq(t, e.str("roles", "W2"), "<nil>", "W2 已移出在册")
+	eq(t, stateAt(e, "retired", 0, "name"), w2Name, "W2 记入停用")
+	eq(t, stateAt(e, "retired", 0, "op"), "rebind", "停用来源为 rebind")
+	eq(t, e.str("roles", "W1", "identity", "terminal_id"), "term_new_"+e.str("roles", "W1", "pane"), "W1 已重绑")
+	eq(t, e.str("anchor", "terminal_id"), "term_new_anchor", "锚点已更新")
+	eq(t, e.str("roles", "O1", "team_update_pending"), "true", "在册成员待收 [TEAM_UPDATE]")
+	eq(t, stateAt(e, "rebinds", 0, "retire", 0), "W2", "审计记录停用成员")
+	eq(t, e.str("rebind_pending"), "<nil>", "计划已清除")
+	if r, _ := strconv.Atoi(rev); e.str("team_rev") != strconv.Itoa(r+1) {
+		t.Fatalf("team_rev 应只加一：%s → %s", rev, e.str("team_rev"))
+	}
+	st := e.mustRun("status", "--team", id)
+	hasNot(t, st, "candidate", "重绑后不再有候选")
+}
+
+func TestRebindRetireRefusalsWriteNothing(t *testing.T) {
+	cases := map[string]struct {
+		workers string
+		retire  []string
+		want    string
+	}{
+		"不能停用 Owner":    {"2", []string{"O1"}, "Owner"},
+		"不能停用唯一 Worker": {"1", []string{"W1"}, "至少保留一个 Worker"},
+		"不在册的成员":        {"2", []string{"W9"}, "不是编组在册成员"},
+		"重复指定":          {"2", []string{"W2", "W2"}, "重复"},
+		"停用后其余成员仍须满足预检": {"2", []string{"W1"}, "--retire W2"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			var e *tenv
+			var id string
+			if c.workers == "1" {
+				e, id = rebindSetup(t, true, false)
+			} else {
+				e, id = retireSetup(t)
+				e.rowDel(e.str("roles", "W2", "name")) // W2 丢失；只停用 W1 时 W2 仍会让预检失败
+				e.rowDel("@" + e.str("roles", "W2", "pane"))
+			}
+			restart(e, restartOpt{})
+			t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
+			before, renames := readState(t, e), e.count("agent", "rename")
+			args := []string{"rebind", "--team", id, "--confirm-anchor", "term_new_anchor"}
+			for _, k := range c.retire {
+				args = append(args, "--retire", k)
+			}
+			ok, out := e.run(args...)
+			if ok {
+				t.Fatalf("应拒绝：\n%s", out)
+			}
+			has(t, out, c.want, "拒绝原因")
+			eq(t, string(readState(t, e)), string(before), "拒绝时状态字节不变")
+			eq(t, e.count("agent", "rename"), renames, "拒绝时零 rename")
+		})
+	}
+}

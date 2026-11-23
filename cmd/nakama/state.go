@@ -145,6 +145,7 @@ type RebindPlan struct {
 	AnchorIdentityOld *Ident       `json:"anchor_identity_old,omitempty"`
 	AnchorIdentityNew *Ident       `json:"anchor_identity_new,omitempty"`
 	Confirm           []string     `json:"confirm,omitempty"`
+	Retire            []string     `json:"retire,omitempty"` // 本次重绑中停用的成员键（提交时移入 retired）
 }
 
 // RebindRecord：审计记录。只记录操作结果、身份与确认方式，不记录任何输出片段。
@@ -153,6 +154,7 @@ type RebindRecord struct {
 	At        string       `json:"at"`
 	Result    string       `json:"result"` // committed | discarded
 	Confirm   []string     `json:"confirm,omitempty"`
+	Retire    []string     `json:"retire,omitempty"`
 	Steps     []RebindStep `json:"steps"`
 	AnchorOld string       `json:"anchor_old_terminal,omitempty"`
 	AnchorNew string       `json:"anchor_new_terminal,omitempty"`

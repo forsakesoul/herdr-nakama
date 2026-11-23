@@ -75,7 +75,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <メンバーキー|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <メンバーキー|anchor>=<session>]... [--confirm-anchor <terminal>] [--retire <メンバーキー>]...
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
@@ -177,13 +177,14 @@ nakama update [--check] [--yes]
    - `--confirm-session` は記録された session が空のロール（例：最初の prompt 前に固定された codex）専用で、値は今回観測された非空の session と一致する必要があります。
    - `--confirm-anchor` は identity を持たないシェルアンカー専用で、値は今回観測された新しい terminal と一致する必要があります。
    - 記録された session が非空のロールは確認による上書きを受け付けず、観測値が記録と一致する必要があります。
+   - `--retire <メンバーキー>`（繰り返し可）は取り戻せない Worker / Advisor（pane が閉じられた、またはセッションが替わった）用です。同じ再バインドの中でそのメンバーを `retired` に移し（`drop` と同じく pane は残し、閉じない）、観測は行わず、他のメンバーは通常どおり再バインドします。Owner は外せず、Worker は少なくとも 1 人残す必要があります。コミット時に `team_rev` は 1 だけ増え、在籍メンバーに `[TEAM_UPDATE]` が保留されるので `init` で配信します。再起動後はアンカーの terminal が変わっているため `drop` はアンカー検査で拒否されます。そのため外す操作を `rebind` に含めています。
 3. 再バインド不要（識別と名前がすでに一致）の場合は `再バインド不要` を出力し、状態を書き込みません。繰り返し実行しても完全な no-op で、`team_rev` も監査記録も増えません。
 
 **管理メニューから。** チームが再起動後の候補に見えるとき、メニューに `b` が表示されます。同じプリフライトを出力し、明示的な確認が必要な値を一覧し、確認後はまさにその値で `rebind` を実行します。`rebind` は改めて観測し、値が一致しなくなっていれば拒否します。
 
 **拒否条件（いずれも rename ゼロ、状態書き込みゼロ）。** チームが `initialized` でない、pending がある、いずれかのロールが stale または未初期化。pane が読めない。
 pane の workspace/tab/cwd が記録と異なる。kind が変わった。観測された session が空、または記録と異なる。タスク名が空でも Bridge の正確な自動名でもない（他者が使用中の可能性）。
-対象のタスク名が他の pane に使われている。確認値が観測と異なる、または確認不要なフィールドを指している。拒否時は候補の差分を出力するだけで、新しい identity として書き込むことはありません。
+対象のタスク名が他の pane に使われている。確認値が観測と異なる、または確認不要なフィールドを指している。拒否時は候補の差分を出力するだけで、新しい identity として書き込むことはありません。失敗したのが Worker / Advisor の場合は `--retire <メンバーキー>` の追加も提案します（提案のみで、自動では外しません）。
 
 **意味は「受け入れ」であり「証明」ではない。** 同じ pane + 同じ kind + 非空の session は、ユーザーが「同じ会話が新しい terminal で再開した」ことを明示的に受け入れたことを示すだけで、同一プロセスや同一の認証情報を証明するものではありません。
 CLI では Herdr サーバーの名前空間を証明できません。アンカーの根拠は `pane get` の workspace/tab/cwd の連続性と pane id です。

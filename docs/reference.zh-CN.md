@@ -75,7 +75,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <成员键|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <成员键|anchor>=<session>]... [--confirm-anchor <terminal>] [--retire <成员键>]...
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
@@ -177,13 +177,14 @@ nakama update [--check] [--yes]
    - `--confirm-session` 只用于记录 session 为空的角色（例如 codex 首次 prompt 前冻结的），值必须等于本次观测到的非空 session。
    - `--confirm-anchor` 只用于没有 identity 的 shell 锚点，值必须等于本次观测到的新 terminal。
    - 记录 session 非空的角色不接受确认覆盖：观测必须与记录相等。
+   - `--retire <成员键>`（可重复）用于已无法找回的 Worker/Advisor（pane 已关闭，或会话已换）：同一次重绑中把它移入 `retired`（与 `drop` 相同，pane 保留、不关闭），不观测它，其余成员照常重绑。不能停用 Owner，停用后至少保留一个 Worker。提交后 `team_rev` 只加一，在册成员待收 `[TEAM_UPDATE]`，运行 `init` 投递。重启后锚点 terminal 已变，`drop` 会因锚点不一致而拒绝，所以停用并入 `rebind`。
 3. 无需重绑（身份与名称都已一致）时输出 `无需重绑` 且不写状态；重复执行是完整 no-op，不增加 `team_rev`，也不增加审计。
 
 **从管理菜单重绑。** 编组看起来是重启后的候选时，菜单显示 `b`。它输出同样的预检结果，列出需要显式确认的值，确认后正是用这些值执行 `rebind`；`rebind` 会重新观测，值不再一致就拒绝。
 
 **拒绝条件（全部零 rename、零状态写入）。** 编组不是 `initialized`、存在 pending、任一角色 stale 或未初始化；pane 不可读；
 pane 的 workspace/tab/cwd 与记录不一致；kind 变化；观测 session 为空，或与记录不同；任务名既不是空也不是 Bridge 精确自动名（可能是他人占用）；
-目标任务名被其它 pane 占用；确认值与观测不一致或指向不需要确认的字段。拒绝时只输出候选差异，不把它写成新 identity。
+目标任务名被其它 pane 占用；确认值与观测不一致或指向不需要确认的字段。拒绝时只输出候选差异，不把它写成新 identity；若失败的是 Worker/Advisor，另提示可加 `--retire <成员键>`（只提示，不自动停用）。
 
 **语义是接纳，不是证明。** 同 pane + 同 kind + 非空 session 只说明用户显式接纳“同一对话在新 terminal 恢复”，不证明同一进程或凭据。
 CLI 无法证明 Herdr server 命名空间；锚点证据是 `pane get` 的 workspace/tab/cwd 连续性与 pane id。

@@ -83,6 +83,7 @@ const usageText = `nakama — Herdr 原生编组插件（Owner / Worker / Adviso
   nakama rebind --team <id> [--preflight | --discard-pending]
                        [--confirm-session <成员键 O1|W1|A1|anchor>=<session>]...
                        [--confirm-anchor <terminal>]   # 电脑/Herdr 重启后显式重绑，见 README
+                       [--retire <成员键 W2|A1>]...   # 重启后无法找回的 Worker/Advisor 一并停用（pane 保留）
   nakama pick                   # 交互选择引擎与人数并建组；已有编组时为管理菜单（overlay 内运行，经 pick action 打开）
   nakama add --team <id> [--role worker|advisor] [--engine E]          # 中途加入 Worker 或 Advisor
   nakama drop --team <id> [--role worker|advisor] [--instance N]       # 移除 Worker 或 Advisor
