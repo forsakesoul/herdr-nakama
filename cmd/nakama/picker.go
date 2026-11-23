@@ -293,7 +293,7 @@ func (a *app) menuRebindArgs(t *Team) ([]string, error) {
 		a.outf(L("存在未完成的重绑计划 %s：先整组复核，已完成的改名不重发。\n"), t.RebindPending.OpID)
 		return args, nil
 	}
-	if msg := rebindApplicable(t); msg != "" {
+	if msg := rebindApplicable(t, nil); msg != "" {
 		return nil, a.pickReject("%s", msg)
 	}
 	res := a.observeRebind(t, rebindOpts{confirm: map[string]string{}})
@@ -303,6 +303,7 @@ func (a *app) menuRebindArgs(t *Team) ([]string, error) {
 		for _, p := range res.problems {
 			a.errf("%s", p)
 		}
+		a.retireHint(res)
 		return nil, a.pickReject(L("拒绝重绑：预检不满足，零 rename、零状态写入。"))
 	}
 	for _, n := range res.needNotes {

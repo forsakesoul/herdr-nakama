@@ -367,6 +367,13 @@ func TestRebindMemberKeyAliasAndPlanCoverage(t *testing.T) {
 		tm.Roles["W1"].Identity = &plan.Steps[1].Old
 		tm.Roles["W2"].Identity = &Ident{TerminalID: "t3", PaneID: "p3", Kind: "pi", Session: "s"}
 		has(t, errString(validatePlanAgainstTeam(tm, plan)), "计划缺少角色 W2", "缺成员拒绝")
+		// 计划显式停用 W2 时缺这一步是合法的；停用 Owner、或同一角色既停用又重绑都视为损坏。
+		plan.Retire = []string{"W2"}
+		eq(t, validatePlanAgainstTeam(tm, plan), nil, "停用 W2 的计划合法")
+		plan.Retire = []string{"O1"}
+		has(t, errString(validatePlanAgainstTeam(tm, plan)), "Owner", "停用 Owner 的计划被拒")
+		plan.Retire = []string{"W1"}
+		has(t, errString(validatePlanAgainstTeam(tm, plan)), "同时被停用与重绑", "停用与重绑重叠被拒")
 	})
 }
 

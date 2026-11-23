@@ -106,6 +106,8 @@ nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal>
 
 プリフライトの出力に従って確認引数を追加します。元のチームがそのまま戻り、各メンバーの会話も保たれます。拒否条件と部分的に失敗した場合の対処は[リファレンス](docs/reference.ja.md)を参照してください。
 
+Worker または Advisor を取り戻せない場合（pane が閉じられた、またはセッションが別のものに替わった）、プリフライトは拒否し `--retire <メンバーキー>` の追加を提案します。同じ再バインドの中でそのメンバーを外し（pane は残す）、他のメンバーは通常どおり再バインドします。人数は後で `add` で補えます。
+
 チームの任意の pane で `prefix+u` を押して `b` を選ぶこともできます。同じプリフライトを表示し、確認後に観測した値で再バインドします。
 
 ## タスク記録
@@ -129,7 +131,7 @@ nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal>
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <メンバーキー|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <メンバーキー|anchor>=<session>]... [--confirm-anchor <terminal>] [--retire <メンバーキー>]...
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]

@@ -75,7 +75,7 @@ Changing shared protocol content changes `protocol_version` for that language. T
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <member-key|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <member-key|anchor>=<session>]... [--confirm-anchor <terminal>] [--retire <member-key>]...
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]
@@ -177,13 +177,14 @@ Task names may be cleared, or auto-renamed by an external tool (Bridge) to `<pro
    - `--confirm-session` is only for roles whose recorded session is empty (e.g. codex frozen before its first prompt); the value must equal the non-empty session observed now.
    - `--confirm-anchor` is only for shell anchors without an identity; the value must equal the new terminal observed now.
    - Roles with a non-empty recorded session accept no confirmation override: the observation must equal the record.
+   - `--retire <member-key>` (repeatable) is for a Worker or Advisor that cannot be recovered (pane closed, or session replaced): the same rebind moves it to `retired` (as `drop` does; the pane is kept, not closed), does not observe it, and rebinds the other members as usual. The Owner cannot be retired, and at least one Worker must remain. On commit `team_rev` goes up by one and current members get a pending `[TEAM_UPDATE]`; run `init` to deliver it. After a restart the anchor terminal has changed, so `drop` refuses on the anchor check; that is why retiring is part of `rebind`.
 3. If no rebind is needed (identity and names already match), it prints `no rebind needed` and writes no state; repeated runs are a full no-op, without incrementing `team_rev` or adding audit entries.
 
 **From the management menu.** `b` appears when the team looks like a restart candidate. It prints the same preflight, lists the values that need explicit confirmation, and after you confirm runs `rebind` with exactly those values; `rebind` observes again and refuses if they no longer match.
 
 **Refusal conditions (always zero renames, zero state writes).** The team is not `initialized`, has a pending operation, or any role is stale or uninitialized; a pane is unreadable;
 a pane's workspace/tab/cwd differs from the record; kind changed; the observed session is empty or differs from the record; the task name is neither empty nor the exact Bridge auto-name (possibly taken by someone else);
-the target task name is taken by another pane; a confirmation value differs from the observation or targets a field that needs no confirmation. On refusal only the candidate differences are printed; they are never written as a new identity.
+the target task name is taken by another pane; a confirmation value differs from the observation or targets a field that needs no confirmation. On refusal only the candidate differences are printed; they are never written as a new identity. When the failing role is a Worker or Advisor, it also suggests adding `--retire <member-key>` (a suggestion only; nothing is retired automatically).
 
 **Semantics: acceptance, not proof.** Same pane + same kind + non-empty session only means the user explicitly accepts "the same conversation resumed in a new terminal"; it does not prove the same process or credentials.
 The CLI cannot prove the Herdr server namespace; anchor evidence is the continuity of workspace/tab/cwd from `pane get` plus the pane id.

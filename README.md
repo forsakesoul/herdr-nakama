@@ -106,6 +106,8 @@ nakama rebind --team <id> --confirm-anchor <new anchor terminal>
 
 Add the confirmation arguments the preflight asks for. You get the original team back, and each member keeps its conversation. For the refusal conditions and what to do after a partial failure, see the [reference](docs/reference.md).
 
+If a Worker or Advisor cannot be recovered (its pane was closed, or its session was replaced by another one), the preflight refuses and suggests adding `--retire <member-key>`: that retires those members in the same rebind (panes kept) and rebinds the others as usual. Use `add` afterwards to bring the team back to size.
+
 You can also press `prefix+u` in any pane of the team and choose `b`: it shows the same preflight and, once you confirm, rebinds with the values it observed.
 
 ## Task records
@@ -129,7 +131,7 @@ Copy [config.example.json](config.example.json) to `config.local.json` in that d
 nakama up [--owner E] [--worker E] [--workers N] [--advisor E|none] [--advisors N] [--pane P] [--cwd C]
 nakama init --team <id>
 nakama status [--team <id>]
-nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <member-key|anchor>=<session>]... [--confirm-anchor <terminal>]
+nakama rebind --team <id> [--preflight | --discard-pending] [--confirm-session <member-key|anchor>=<session>]... [--confirm-anchor <terminal>] [--retire <member-key>]...
 nakama add --team <id> [--role worker|advisor] [--engine E]
 nakama drop --team <id> [--role worker|advisor] [--instance N]
 nakama swap --team <id> --role worker|advisor [--instance N] [--engine E]

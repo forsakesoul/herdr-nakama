@@ -13,14 +13,50 @@ import (
 // 不在 init/up 中自动发生；预检不满足时零 rename、零状态写入。
 
 const rebindUsage = "用法：nakama rebind --team <id> [--preflight | --discard-pending] " +
-	"[--confirm-session <成员键 O1|W1|A1|anchor>=<session>]... [--confirm-anchor <terminal>]\n"
+	"[--confirm-session <成员键 O1|W1|A1|anchor>=<session>]... [--confirm-anchor <terminal>] [--retire <成员键 W2|A1>]...\n"
 
 type rebindOpts struct {
 	team          string
 	confirm       map[string]string // 成员键或 anchor -> session（仅记录 session 为空时需要）；别名在加载 Team 后规范化
 	confirmAnchor string            // 无 Identity 的 shell 锚点：本次观测到的新 terminal
+	retire        []string          // 重启后无法找回的 Worker/Advisor：本次重绑中停用（pane 保留），其余成员照常重绑
 	preflight     bool
 	discard       bool
+}
+
+// checkRetire：只能停用在册的 Worker/Advisor，不能停用 Owner，停用后至少保留一个 Worker。
+// 这与 drop 的约束一致；重启后锚点 terminal 已变，drop 无法单独执行，所以停用并入 rebind。
+func checkRetire(t *Team, keys []string) error {
+	seen := map[string]bool{}
+	workers := len(t.membersOf("worker"))
+	for _, k := range keys {
+		r := t.role(k)
+		if r == nil {
+			return fmt.Errorf(L("--retire %s 不是编组在册成员"), k)
+		}
+		if seen[k] {
+			return fmt.Errorf(L("--retire %s 重复"), k)
+		}
+		seen[k] = true
+		switch kindOf(k) {
+		case "owner":
+			return fmt.Errorf("%s", L("--retire 不能停用 Owner；Owner 无法找回时只能新建编组。"))
+		case "worker":
+			workers--
+		}
+	}
+	if workers < 1 {
+		return fmt.Errorf("%s", L("--retire 后编组不再有 Worker；至少保留一个 Worker。"))
+	}
+	return nil
+}
+
+func retireSet(keys []string) map[string]bool {
+	m := map[string]bool{}
+	for _, k := range keys {
+		m[k] = true
+	}
+	return m
 }
 
 // rebindKeyKnown 只做语法判断：成员键、anchor，或旧别名 owner|worker|advisor（别名须在加载 Team 后按数量解析）。
@@ -98,6 +134,11 @@ func parseRebindArgs(args []string) (rebindOpts, bool, error) {
 				return o, false, fmt.Errorf(L("角色 %s 的 --confirm-session 重复"), key)
 			}
 			o.confirm[key] = sess
+		case "--retire":
+			if !memberKeyRe.MatchString(v) {
+				return o, false, fmt.Errorf(L("--retire 须为成员键（如 W2、A1）：%s"), v)
+			}
+			o.retire = append(o.retire, v)
 		default:
 			return o, false, fmt.Errorf(L("未知参数：%s"), arg)
 		}
@@ -107,6 +148,9 @@ func parseRebindArgs(args []string) (rebindOpts, bool, error) {
 	}
 	if o.preflight && o.discard {
 		return o, false, fmt.Errorf("%s", L("--preflight 与 --discard-pending 不能同时使用"))
+	}
+	if o.discard && len(o.retire) > 0 {
+		return o, false, fmt.Errorf("%s", L("--retire 与 --discard-pending 不能同时使用"))
 	}
 	return o, false, nil
 }
@@ -142,6 +186,11 @@ func (a *app) cmdRebind(args []string) error {
 	}
 	if err := normalizeConfirm(t, &o); err != nil {
 		return a.fail("%v", err)
+	}
+	if t.RebindPending == nil {
+		if err := checkRetire(t, o.retire); err != nil {
+			return a.fail("%v", err)
+		}
 	}
 	if o.discard {
 		return a.discardRebind(t)
@@ -184,12 +233,23 @@ func checkPlanConfirm(p *RebindPlan, o rebindOpts) string {
 	if o.confirmAnchor != "" && o.confirmAnchor != p.AnchorNew {
 		return L("--confirm-anchor 与计划不一致，拒绝对账（可 --discard-pending 后重新 rebind）。")
 	}
+	if len(o.retire) > 0 {
+		want, got := retireSet(p.Retire), retireSet(o.retire)
+		if len(want) != len(got) || len(o.retire) != len(got) {
+			return L("--retire 与计划不一致，拒绝对账（可 --discard-pending 后重新 rebind）。")
+		}
+		for k := range got {
+			if !want[k] {
+				return L("--retire 与计划不一致，拒绝对账（可 --discard-pending 后重新 rebind）。")
+			}
+		}
+	}
 	return ""
 }
 
 // 适用范围：只支持 initialized 的稳定组。旧 UNKNOWN、stale、半初始化一律拒绝，不清空、不补发 init/prompt。
-// 本函数不看 rebind_pending：计划执行前与恢复时都用它重新确认组仍是稳定组。
-func rebindApplicable(t *Team) string {
+// 本函数不看 rebind_pending：计划执行前与恢复时都用它重新确认组仍是稳定组。skip 为本次停用的成员，不参与稳定性要求。
+func rebindApplicable(t *Team, skip map[string]bool) string {
 	if t.Phase != "initialized" {
 		return fmt.Sprintf(L("编组 phase=%s：rebind 只支持 initialized 的稳定组。"), t.Phase)
 	}
@@ -200,6 +260,9 @@ func rebindApplicable(t *Team) string {
 		return L("编组缺少锚点 pane 记录。")
 	}
 	for _, rn := range t.members() {
+		if skip[rn] {
+			continue
+		}
 		r := t.role(rn)
 		if !r.Inited || r.Identity == nil {
 			return fmt.Sprintf(L("角色 %s 未完成初始化或缺少冻结身份；rebind 不清空、不补发 init/prompt。"), rn)
@@ -260,10 +323,12 @@ type rebindResult struct {
 	needArgs       []string
 	used           map[string]bool
 	anchorUsed     bool
+	retire         []string
+	blocked        []string // 预检有问题的 Worker/Advisor：拒绝时提示可用 --retire 停用
 }
 
 func (r rebindResult) changed() bool {
-	if r.anchorChanged {
+	if r.anchorChanged || len(r.retire) > 0 {
 		return true
 	}
 	for _, s := range r.steps {
@@ -279,7 +344,7 @@ func (r rebindResult) plan(op string) *RebindPlan {
 	return &RebindPlan{
 		OpID: op, At: time.Now().UTC().Format(time.RFC3339), Steps: r.steps,
 		AnchorOld: r.anchorOld, AnchorNew: r.anchorNew,
-		AnchorIdentityOld: r.anchorIdentOld, AnchorIdentityNew: r.anchorIdent, Confirm: r.confirmed,
+		AnchorIdentityOld: r.anchorIdentOld, AnchorIdentityNew: r.anchorIdent, Confirm: r.confirmed, Retire: r.retire,
 	}
 }
 
@@ -312,6 +377,12 @@ func checkRebindSession(key, recorded, observed string, confirm map[string]strin
 }
 
 func (a *app) observeRebindRole(t *Team, rn string, confirm map[string]string, res *rebindResult) {
+	before := len(res.problems)
+	defer func() {
+		if len(res.problems) > before && kindOf(rn) != "owner" {
+			res.blocked = append(res.blocked, rn)
+		}
+	}()
 	r := t.role(rn)
 	old := *r.Identity
 	pane := string(r.Pane)
@@ -420,8 +491,12 @@ func (a *app) observeRebindAnchor(t *Team, o rebindOpts, res *rebindResult) {
 
 // observeRebind 只读：逐角色、锚点观测，汇总问题、需要的确认与待改名步骤。
 func (a *app) observeRebind(t *Team, o rebindOpts) rebindResult {
-	res := rebindResult{used: map[string]bool{}}
+	res := rebindResult{used: map[string]bool{}, retire: o.retire}
+	skip := retireSet(o.retire)
 	for _, rn := range t.members() {
+		if skip[rn] {
+			continue // 停用的成员不观测：它的 pane 可能已不存在
+		}
 		a.observeRebindRole(t, rn, o.confirm, &res)
 	}
 	a.observeRebindAnchor(t, o, &res)
@@ -441,6 +516,18 @@ func (a *app) observeRebind(t *Team, o rebindOpts) rebindResult {
 	return res
 }
 
+// retireHint：预检因 Worker/Advisor 失败时，提示可用 --retire 停用它们（只提示，不自动停用）。
+func (a *app) retireHint(res rebindResult) {
+	if len(res.blocked) == 0 {
+		return
+	}
+	args := ""
+	for _, k := range res.blocked {
+		args += " --retire " + k
+	}
+	a.errf(L("若这些成员已无法找回（pane 已关闭或会话已换），可在本次重绑中停用它们（pane 保留），其余成员照常重绑：追加%s"), args)
+}
+
 func (a *app) outRebindDiff(res rebindResult) {
 	for _, s := range res.steps {
 		extra := ""
@@ -456,11 +543,14 @@ func (a *app) outRebindDiff(res rebindResult) {
 	if res.anchorChanged {
 		a.outf("  anchor  terminal %s → %s\n", res.anchorOld, res.anchorNew)
 	}
+	for _, k := range res.retire {
+		a.outf(L("  %-7s 停用（--retire，pane 保留）\n"), k)
+	}
 }
 
 // planRebind：预检 → 候选/确认提示 → 落盘完整计划 → 执行。预检失败与待确认时零 rename、零状态写入。
 func (a *app) planRebind(t *Team, o rebindOpts) error {
-	if msg := rebindApplicable(t); msg != "" {
+	if msg := rebindApplicable(t, retireSet(o.retire)); msg != "" {
 		return a.fail("%s", msg)
 	}
 	res := a.observeRebind(t, o)
@@ -470,12 +560,16 @@ func (a *app) planRebind(t *Team, o rebindOpts) error {
 		for _, p := range res.problems {
 			a.errf("%s", p)
 		}
+		a.retireHint(res)
 		return a.fail(L("拒绝重绑：预检不满足，零 rename、零状态写入。"))
 	}
 	if len(res.needArgs) > 0 {
 		a.outf("%s", L("需要显式确认（零 rename、零状态写入）：\n"))
 		for _, n := range res.needNotes {
 			a.outf("  - %s\n", n)
+		}
+		for _, k := range o.retire {
+			res.needArgs = append(res.needArgs, "--retire "+k)
 		}
 		a.outf(L("确认后重新执行：\n  nakama rebind --team %s %s\n"), t.TeamID, strings.Join(res.needArgs, " "))
 		return errExit
@@ -521,11 +615,18 @@ func validatePlanAgainstTeam(t *Team, p *RebindPlan) error {
 		}
 		return false
 	}
+	if err := checkRetire(t, p.Retire); err != nil {
+		return err
+	}
+	retired := retireSet(p.Retire)
 	justified := map[string]bool{}
 	seen := map[string]bool{}
 	for _, s := range p.Steps {
 		if seen[s.Role] {
 			return fmt.Errorf(L("角色 %s 重复出现"), s.Role)
+		}
+		if retired[s.Role] {
+			return fmt.Errorf(L("角色 %s 同时被停用与重绑"), s.Role)
 		}
 		seen[s.Role] = true
 		r := t.role(s.Role)
@@ -555,7 +656,7 @@ func validatePlanAgainstTeam(t *Team, p *RebindPlan) error {
 		}
 	}
 	for _, rn := range t.members() {
-		if !seen[rn] {
+		if !seen[rn] && !retired[rn] {
 			return fmt.Errorf(L("计划缺少角色 %s"), rn)
 		}
 	}
@@ -610,7 +711,7 @@ func validatePlanAgainstTeam(t *Team, p *RebindPlan) error {
 // final=true 为提交前复核：所有步骤的名称必须已等于计划名。
 func (a *app) revalidatePlan(t *Team, final bool) error {
 	p := t.RebindPending
-	if msg := rebindApplicable(t); msg != "" {
+	if msg := rebindApplicable(t, retireSet(p.Retire)); msg != "" {
 		return a.fail(L("%s 计划保留，零新增 rename。"), msg)
 	}
 	if err := validatePlanAgainstTeam(t, p); err != nil {
@@ -751,18 +852,30 @@ func (a *app) commitRebind(t *Team) error {
 	}
 	t.Rebinds = append(t.Rebinds, rebindRecord(plan, "committed"))
 	t.RebindPending = nil
-	t.TeamRev++
+	if len(plan.Retire) == 0 {
+		t.TeamRev++
+	} else {
+		for _, k := range plan.Retire {
+			r := t.role(k)
+			a.warnf(L("旧 %s（%s，pane %s）已停用但未关闭：请确认它已停止写入后自行处理该 pane。"), k, r.Name, r.Pane)
+			t.retire(k, "rebind")
+		}
+		t.markUpdate() // team_rev+1，并让在册成员待收 [TEAM_UPDATE]
+	}
 	if err := a.save(t); err != nil {
 		return err
 	}
 	a.outf(L("重绑完成：编组 %s team_rev=%d，审计 %s。运行 nakama status 核对。\n"), t.TeamID, t.TeamRev, plan.OpID)
+	if len(plan.Retire) > 0 {
+		a.outf(L("成员已变更：运行 nakama init --team %s 向在册成员投递 [TEAM_UPDATE]。\n"), t.TeamID)
+	}
 	return nil
 }
 
 // rebindRecord 把计划快照原样写入审计（不写输出片段）。
 func rebindRecord(p *RebindPlan, result string) RebindRecord {
 	return RebindRecord{
-		OpID: p.OpID, At: p.At, Result: result, Confirm: p.Confirm, Steps: p.Steps,
+		OpID: p.OpID, At: p.At, Result: result, Confirm: p.Confirm, Steps: p.Steps, Retire: p.Retire,
 		AnchorOld: p.AnchorOld, AnchorNew: p.AnchorNew,
 		AnchorOldIdentity: p.AnchorIdentityOld, AnchorNewIdentity: p.AnchorIdentityNew,
 	}
