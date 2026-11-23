@@ -12,7 +12,6 @@ type engine struct{ launcher, model, effort string }
 var (
 	modelRe  = regexp.MustCompile(`^[A-Za-z0-9._-]*(\[[0-9]+[A-Za-z]\])?$`)
 	effortRe = regexp.MustCompile(`^[a-z]*$`)
-	solRe    = regexp.MustCompile(`^gpt-.*-sol(\[.*\])?$`)
 )
 
 func parseEngine(e string) (engine, bool) {
@@ -30,17 +29,7 @@ func parseEngine(e string) (engine, bool) {
 		return g, false
 	}
 	switch g.launcher {
-	case "codex":
-		if g.model == "" {
-			return g, false
-		}
-		if g.effort == "" {
-			g.effort = "medium"
-			if solRe.MatchString(g.model) {
-				g.effort = "high"
-			}
-		}
-	case "pi":
+	case "codex", "pi":
 		if g.model == "" {
 			return g, false
 		}
@@ -52,12 +41,8 @@ func parseEngine(e string) (engine, bool) {
 			return g, false
 		}
 	case "cc":
-		// 裸 cc 默认 Opus 5.5 + medium；只给 effort 的写法非法。写了 model 而未写 effort 时不传 --effort。
-		if g.model == "" {
-			if g.effort != "" {
-				return g, false
-			}
-			g.model, g.effort = "claude-opus-5-5", "medium"
+		if g.model == "" && g.effort != "" {
+			return g, false
 		}
 	default:
 		return g, false
@@ -92,6 +77,9 @@ func (g engine) hint() string {
 		return fmt.Sprintf(L("确认 %s 模型与 bypass_permissions 完全访问权限"), g.model)
 	case "cc":
 		m := g.model
+		if m == "" {
+			return L("确认走 Claude 官方订阅（无 ANTHROPIC_BASE_URL 覆盖）、核对本机默认模型与 effort，并确认已跳过权限检查")
+		}
 		if g.effort != "" {
 			m += " + " + g.effort
 		}
@@ -109,7 +97,10 @@ func (g engine) hint() string {
 func (g engine) paneCommand(piProvider, ccEnv string) string {
 	switch g.launcher {
 	case "cc":
-		c := "cc --model " + posixQuote(g.model)
+		c := "cc"
+		if g.model != "" {
+			c += " --model " + posixQuote(g.model)
+		}
 		if g.effort != "" {
 			c += " --effort " + posixQuote(g.effort)
 		}

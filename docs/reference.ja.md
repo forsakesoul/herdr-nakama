@@ -45,28 +45,13 @@ herdr plugin action list --plugin forsakesoul.nakama
 ## 設定
 
 設定ディレクトリ：`$HERDR_PLUGIN_CONFIG_DIR`（Herdr が注入）、なければ `${XDG_CONFIG_HOME:-$HOME/.config}/nakama`。
-ファイル：`config.json`。**実際の provider / パス / 認証情報をリポジトリにコミットしないでください。**
-
-```json
-{
-  "default_profile": {
-    "owner": "sol",
-    "worker": "ds",
-    "advisor": "none",
-    "engine_map": { "sol": "codex/<model>:high", "ds": { "owner": "pi/<model>:low", "worker": "pi/<model>:low", "advisor": "pi/<model>:high" } },
-    "cc_env_file": ""
-  },
-  "projects": {
-    "<repo-name>": { "prefix": "<short>", "context_file": "/abs/project-context.md", "trigger": ";xx.ctx" }
-  }
-}
-```
+[config.example.json](../config.example.json) をこのディレクトリの `config.local.json` にコピーし、ロールの既定値、モデルの別名、provider、ローカルパスを設定します。`config.local.json` がなければ、同じディレクトリの既存の `config.json` を読み込みます。
 
 - **言語**：CLI の出力とエージェントのプロンプトは `NAKAMA_LANG=en|zh|ja` で選び、未設定なら `LC_ALL` / `LC_MESSAGES` / `LANG`（`zh*`、`ja*`）の順に参照し、それ以外は英語です。この変数はプラグインのプロセスが読むため、Herdr を起動する環境で設定してください。`up` と `init` では同じ言語を使ってください。言語ごとにプロンプトが異なるため、途中で切り替えると protocol ハッシュのずれとして拒否されます。
 - 優先順位：CLI > `default_profile` > 組み込みの中立な既定値（設定がなければエラー。個人の provider は組み込まない）。
 - **`auto_init`**：`default_profile.auto_init: true` の場合、`up`（新規作成したチーム）と `add` / `swap` は、起動に成功すると自分のロックを先に解放してから続けて `init` を実行します。既定ではオフです。2 段階に分けているのは、prompt を送る前に各 pane のモデルと権限を確認できるようにするためです。`up` で再開した半端なチームは自動では初期化されません。
 - エンジン記法：`<launcher>/<model>[:effort]`、または `engine_map` の短縮名。
-- `cc` でモデルを省略すると `claude-opus-5-5` + `medium`（`cc --model claude-opus-5-5 --effort medium`）。モデルを指定し effort を省略した場合は `--effort` を渡さず、Claude 自身の既定値に任せます。
+- `cc` の別名を設定していない場合、`cc` はローカルの Claude Code の既定値を使います。`cc/<model>` でモデルを指定でき、effort は明示するか Claude の既定値に任せます。Codex と Pi では effort を省略すると `medium` が使われます。
 - **provider**：`pi` ロールの provider は `default_profile.pi_provider` から取得します（非公開、コミット禁止）。未設定なら `up` は split の前に拒否します。
 - **`ccenv` ランチャー**：pane 内で env ファイルを `source`（例：`ANTHROPIC_BASE_URL` などで自前のゲートウェイを指定）してから `cc --model <model>` を起動します。`model` は必須で effort は受け付けません。`default_profile.cc_env_file` はこのマシン上の通常の読み取り可能なファイルを指す必要があり、`up` の前に検査されます（`-f` かつ `-r`。内容は読まず表示もしない）。ディレクトリは拒否します。source に失敗した場合（非ゼロの `return` を含む）は非ゼロのまま `cc` を起動しません。パスは**該当 pane のコマンド文字列**に現れます（パスは秘密情報ではありません）が、env ファイルの**内容**がコマンド / 状態 / プロンプト / ログに入ることはありません。
 - `projects` テーブルはコンテキストファイルのパスを**参照**するだけで、本文はコピーしません。ファイルが存在しない / 読めない場合 `init` は停止します。
@@ -76,9 +61,9 @@ herdr plugin action list --plugin forsakesoul.nakama
 
 [Claude モデル選択ガイド](https://claude.dev/blog/which-claude-model-should-you-build-with/)（2026-11-09）を参考に、Owner と Advisor は設計判断と審査を担う Opus / medium、日常の Worker は本プロジェクトの方針で Haiku / medium とします。ガイドは範囲が明確な実装に Sonnet を推奨しています。ここでは Haiku から始めても検証を省略せず、複雑な作業では編組前に Sonnet / Opus を評価します。
 
-`config.example.json` の `engine_map.claude` を上記の Herdr プラグイン設定に追加します。対象 pane で `prefix+u` を押し、Owner / Worker / Advisor にそれぞれ `claude` を入力して、概要を確認して編組します。起動確認後に `prefix+i` で初期化します。プラグインの選択画面を使い、設定と状態のディレクトリを一致させます。
+`config.example.json` の `default_profile.engine_map.claude` を上記の Herdr プラグイン設定に追加します。対象 pane で `prefix+u` を押し、Owner / Worker / Advisor にそれぞれ `claude` を入力して、概要を確認して編組します。起動確認後に `prefix+i` で初期化します。プラグインの選択画面を使い、設定と状態のディレクトリを一致させます。
 
-任意のプリセットであり、既存のロール既定値やプライベート設定は変更しません。`cc` は Opus 5.5 / medium のまま、Worker は `cc/haiku:medium` に展開されます。`haiku` 別名はローカルの Claude Code に従うため、起動後に実際のモデルと effort を確認します。独立審査が不要なら Advisor 欄に `none`、より強い実行モデルが必要なら Worker 欄に `cc/sonnet:medium` または `cc/opus:medium` を入力します。`ccenv` は引き続き effort を受け付けません。ゲートウェイや Pi のモデル、引数と可用性は実際の provider で確認します。
+ロールに `claude` を入力するとこのプリセットが選ばれます。起動後に実際のモデルと effort を確認します。独立審査が不要なら Advisor 欄に `none`、より強い実行モデルが必要なら Worker 欄に `cc/sonnet:medium` または `cc/opus:medium` を入力します。ゲートウェイや Pi のモデルの可用性は実際の provider で確認します。
 
 失敗時の検証、モデル昇格と調整の承認は[共有プロトコルの Claude ルール](../prompts/ja/protocol.md)に従います。在籍インスタンスのエンジンは固定したままとし、調整が必要なら安全な停止点で引き継いでそのロールのインスタンスを交代させるか（「途中でのロールの追加・削除・交代」参照）、プロトコルに従って新しい pane に編組を作成します。
 
@@ -217,8 +202,7 @@ CLI では Herdr サーバーの名前空間を証明できません。アンカ
 **Bridge との競合。** Herdr の rename には compare-and-swap の意味論がないため、読み取りと改名の間に Bridge が自動命名する可能性を数学的に排除できません。
 ずれを検出したら停止して計画を保持します。プラグインは Bridge を追いかけたり変更したりしません。成功しても名前が永久に変わらないとは限らず、その後の `init` / `prompt` は引き続き厳格なルールで検査します。
 
-**状態の互換性。** このバージョンは `schema_version: 4` を書き込みます：ロールはメンバーキー（`O1`、`W1`、`W2`、`A1`…）で管理されます。schema 1〜3 の旧状態はメモリ上で変換され、初回保存時にのみ schema 4 として書き戻されます。schema 2 で `rebind_pending` と `rebinds`（監査）、schema 3 で `task_dir`、`retired`、ロールごとの `team_update_pending` を追加しました。旧バージョンはより高い schema を読むと拒否するため、
-新しいフィールドを失った状態で上書きされることはありません。旧バージョンに戻す場合は、未完了の計画がないことを確認し、状態ファイルを自分で処理してください。schema 1〜3 は引き続き読み込め、初回の実際の書き込み時に 4 へ更新されます。
+**状態の互換性。** Nakama は旧 schema 1〜4 を読み込み、次回の保存時に `schema_version: 5` を書き込みます。schema 2 で `rebind_pending` と `rebinds`、schema 3 で `task_dir`、`retired`、ロールごとの `team_update_pending`、schema 4 で `O1` や `W1` などのメンバーキーを導入しました。旧状態の読み込み時は、当時の暗黙の Claude と Sol の既定値を明示して、再開後も元の起動パラメータを使います。旧バイナリは schema 5 を拒否します。ダウングレード前に保留中の計画を完了し、更新済みの状態ファイルは個別に扱ってください。
 
 **自動では行われないこと。** `init` と `up` は再バインドを行いません。`init` は「terminal または名前だけが変わった候補」を検出すると `明示的な rebind --team <id> が必要な可能性` を案内するだけで、
 stale にせず状態も書き込みません。`status` は読み取り専用で、記録された pane に基づいて観測し、`binding=bound|candidate|unverified` を出力して、ライフサイクルの `status` とバインドの有効性を区別します。`bound` は現在のタスク名が記録されたロール名と一致することも要求し、他者の名前や空の場合は最大でも `unverified` です。`candidate` は候補（同じ pane と kind で terminal または名前が変化）にすぎず、`rebind` がプリフライトを通過する保証はないため、まず `--preflight` で確認してください。

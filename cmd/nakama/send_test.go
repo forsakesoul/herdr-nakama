@@ -274,11 +274,11 @@ func TestMenuDownAndRebind(t *testing.T) {
 
 func TestAutoInitChainsAfterUpAndAdd(t *testing.T) {
 	e := newEnv(t)
-	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.1-sol:high", "worker": "codex/gpt-6.1-luna:medium", "advisor": "none", "auto_init": true }, "projects": {} }`)
+	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "codex/gpt-6.1-luna:medium", "advisor": "none", "auto_init": true }, "projects": {} }`)
 	has(t, e.mustRun("up"), "READY", "建组后接着初始化")
 	id := e.teamID()
 	eq(t, e.str("phase"), "initialized", "已初始化")
-	e.mustRun("add", "--team", id, "--engine", "codex/gpt-6.1-sol:high")
+	e.mustRun("add", "--team", id, "--engine", "codex/gpt-6.2-sol:high")
 	eq(t, e.str("phase"), "initialized", "加人后接着初始化")
 	eq(t, e.str("roles", "A1", "inited"), "true", "新成员已初始化")
 	has(t, e.lastPrompt(id+"_design"), "[TEAM_UPDATE] team_rev=2", "其余成员收到更新")

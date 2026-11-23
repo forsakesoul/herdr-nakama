@@ -6,14 +6,14 @@
     "pi_provider": "<provider>",
     "cc_env_file": "",
     "engine_map": {
-      "sol": "codex/gpt-6.1-sol:high",
+      "sol": "codex/gpt-6.2-sol:high",
       "luna": "codex/gpt-6-luna:max",
       "qoder": "qoder/Qwen3.8-Flash",
-      "cc": "cc",
+      "cc": "cc/claude-opus-5-5:medium",
       "claude": {
-        "owner": "cc",
+        "owner": "cc/claude-opus-5-5:medium",
         "worker": "cc/haiku:medium",
-        "advisor": "cc"
+        "advisor": "cc/claude-opus-5-5:medium"
       },
       "haiku": "cc/haiku",
       "gw": "ccenv/<model>",

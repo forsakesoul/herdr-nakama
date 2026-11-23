@@ -98,7 +98,7 @@ func (a *app) requireEngine(raw string) bool {
 	switch eng.launcher {
 	case "pi":
 		if a.piProvider == "" {
-			a.errf(L("pi 引擎缺少 provider：请在 config.json 的 default_profile.pi_provider 填写（私有，勿入库）。"))
+			a.errf(L("pi 引擎缺少 provider：请在 config.local.json 的 default_profile.pi_provider 填写（私有，勿入库）。"))
 			return false
 		}
 	case "ccenv":
@@ -390,7 +390,7 @@ func (a *app) cmdUp(args []string) error {
 		}
 	}
 	if nAdvisors > 0 && advisorEng == "" {
-		return a.fail(L("--advisors %d 需要 Advisor 引擎：请用 --advisor 指定，或在 config.json 配置 default_profile.advisor。"), nAdvisors)
+		return a.fail(L("--advisors %d 需要 Advisor 引擎：请用 --advisor 指定，或在 config.local.json 配置 default_profile.advisor。"), nAdvisors)
 	}
 
 	// 名称先行：唯一生成点 + 任何 split 之前的 NAME 校验（失败零副作用）。

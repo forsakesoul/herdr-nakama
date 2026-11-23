@@ -79,12 +79,12 @@ func TestIdentSessionEmptyVsNonEmptyIsDrift(t *testing.T) {
 
 func TestParseEngine(t *testing.T) {
 	ok := map[string]engine{
-		"codex/gpt-6.1-sol":         {"codex", "gpt-6.1-sol", "high"},
+		"codex/gpt-6.2-sol":         {"codex", "gpt-6.2-sol", "medium"},
 		"codex/gpt-6.1-luna":        {"codex", "gpt-6.1-luna", "medium"},
-		"codex/gpt-6.1-sol[1M]:max": {"codex", "gpt-6.1-sol[1M]", "max"},
+		"codex/gpt-6.2-sol[1M]:max": {"codex", "gpt-6.2-sol[1M]", "max"},
 		"pi/m:low":                  {"pi", "m", "low"},
 		"pi/m":                      {"pi", "m", "medium"},
-		"cc":                        {"cc", "claude-opus-5-5", "medium"},
+		"cc":                        {"cc", "", ""},
 		"cc/opus:high":              {"cc", "opus", "high"},
 		"cc/haiku":                  {"cc", "haiku", ""},
 		"ccenv/model-x[1M]":         {"ccenv", "model-x[1M]", ""},
@@ -113,7 +113,7 @@ func TestPaneCommandQuoting(t *testing.T) {
 	ce, _ := parseEngine("ccenv/m")
 	eq(t, ce.paneCommand("", "/a b/$(x)'.env"), `set -a; . '/a b/$(x)'\''.env' || exit 1; set +a; cc --model 'm'`, "ccenv 命令")
 	cc, _ := parseEngine("cc")
-	eq(t, cc.paneCommand("", ""), "cc --model 'claude-opus-5-5' --effort 'medium'", "裸 cc 默认 Opus 5.5 + medium")
+	eq(t, cc.paneCommand("", ""), "cc", "裸 cc 使用本机 Claude 默认值")
 	haiku, _ := parseEngine("cc/haiku")
 	eq(t, haiku.paneCommand("", ""), "cc --model 'haiku'", "cc/haiku 不传 --effort")
 	eq(t, posixQuote(""), "''", "空串")
@@ -231,9 +231,9 @@ func TestCheckPlanConfirm(t *testing.T) {
 }
 
 func TestStartArgs(t *testing.T) {
-	cx, _ := parseEngine("codex/gpt-6.1-sol:max")
+	cx, _ := parseEngine("codex/gpt-6.2-sol:max")
 	eq(t, strings.Join(cx.startArgs(), " "),
-		`--no-daemon --model gpt-6.1-sol -c model_reasoning_effort="max" --dangerously-bypass-approvals-and-sandbox --no-alt-screen`, "codex 参数")
+		`--no-daemon --model gpt-6.2-sol -c model_reasoning_effort="max" --dangerously-bypass-approvals-and-sandbox --no-alt-screen`, "codex 参数")
 	qd, _ := parseEngine("qoder/Qwen3.8-Flash")
 	eq(t, strings.Join(qd.startArgs(), " "), "--model Qwen3.8-Flash --permission-mode bypass_permissions", "qoder 参数")
 	for in, kind := range map[string]string{"codex/m": "codex", "qoder/m": "qoder", "ccenv/m": "ccenv"} {

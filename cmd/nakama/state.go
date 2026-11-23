@@ -15,14 +15,16 @@ import (
 // 状态：<STATE_DIR>/teams/<safe-id>.json。只解析不执行；同目录临时文件 + rename 原子替换；目录 0700、文件 0600。
 // schema 2 增加 rebind 计划与审计；schema 3 增加任务目录、停用角色记录与 TEAM_UPDATE 待投递标记；
 // schema 4 把 roles 改为成员键（O1/W1/A1）到角色的 map，支持多 Worker 与多 Advisor。
+// schema 5 显式保存旧版本隐含的引擎默认值，使它们与本地默认值区分开。
 // 旧二进制读到更高的 schema 即拒绝，因此不会在丢失新字段的情况下覆盖状态。
-const schemaVersion = 4
+const schemaVersion = 5
 
 // 旧 schema 仍可读取；由本版本保存时升级为 schemaVersion。
 const (
 	schemaVersionV1 = 1
 	schemaVersionV2 = 2
 	schemaVersionV3 = 3
+	schemaVersionV4 = 4
 )
 
 // 每类在册人数上限；只限制同时在册的人数，不限制实例号的最大值。
@@ -255,7 +257,7 @@ func (t *Team) setPending(role, step, delivery string) {
 }
 
 // 旧 schema（1-3）的 roles 是 owner/worker/advisor 三槽。读入时在内存中改写为成员键，文件本身不在此改写；
-// 只有之后的实际保存才写出 schema 4。映射无法确定（如引用了不存在的角色）时拒绝，不补默认值。
+// 只有之后的实际保存才写出当前 schema。映射无法确定（如引用了不存在的角色）时拒绝，不补默认值。
 type legacyRoles struct {
 	Owner   *Role `json:"owner"`
 	Worker  *Role `json:"worker"`
@@ -271,7 +273,7 @@ func (t *Team) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &aux); err != nil {
 		return err
 	}
-	if t.SchemaVersion >= schemaVersion {
+	if t.SchemaVersion >= schemaVersionV4 {
 		return json.Unmarshal(aux.Roles, &t.Roles)
 	}
 	var lr legacyRoles
@@ -445,7 +447,30 @@ func (s store) load(id string) (*Team, error) {
 	if err := json.Unmarshal(b, &t); err != nil {
 		return nil, fmt.Errorf(L("状态文件校验失败：%s（schema/字段/身份不合法，请人工检查，不自动接管）"), id)
 	}
+	if t.SchemaVersion <= schemaVersionV4 {
+		for _, role := range t.Roles {
+			role.Engine = migrateLegacyEngine(role.Engine)
+		}
+	}
 	return &t, nil
+}
+
+var legacySolModelRe = regexp.MustCompile(`^gpt-.*-sol(\[.*\])?$`)
+
+// 旧状态只记录选择字符串，恢复时须先补齐当时的启动参数。
+func migrateLegacyEngine(raw string) string {
+	eng, ok := parseEngine(raw)
+	if !ok {
+		return raw
+	}
+	if eng.launcher == "cc" && eng.model == "" {
+		return "cc/claude-opus-5-5:medium"
+	}
+	_, effort, _ := strings.Cut(raw, ":")
+	if eng.launcher == "codex" && effort == "" && legacySolModelRe.MatchString(eng.model) {
+		return "codex/" + eng.model + ":high"
+	}
+	return raw
 }
 
 func (s store) save(t *Team) error {
@@ -503,13 +528,13 @@ func validIdent(v any, pane any, needSessionType bool) bool {
 }
 
 // rebind 计划校验：字段齐备、角色名合法、结果取值受限；不校验与当前角色的一致性（由 rebind 预检负责）。
-// validRoleRef：角色引用在 schema 1-3 为 owner/worker/advisor，在 schema 4 为成员键。
+// validRoleRef：角色引用在 schema 1-3 为 owner/worker/advisor，从 schema 4 起为成员键。
 func validRoleRef(v any, ver float64) bool {
 	s, ok := v.(string)
 	if !ok {
 		return false
 	}
-	if ver >= schemaVersion {
+	if ver >= schemaVersionV4 {
 		return memberKeyRe.MatchString(s)
 	}
 	return s == "owner" || s == "worker" || s == "advisor"
@@ -636,7 +661,7 @@ func validateTeam(raw []byte) error {
 	counts := map[string]int{}
 	for key, rv := range roles {
 		kind := key
-		if v >= schemaVersion {
+		if v >= schemaVersionV4 {
 			if !memberKeyRe.MatchString(key) {
 				return bad
 			}
@@ -645,8 +670,8 @@ func validateTeam(raw []byte) error {
 			return bad
 		}
 		if rv == nil {
-			// 旧 schema 只允许 advisor 为空；schema 4 的成员值一律非 null。
-			if v < schemaVersion && kind == "advisor" {
+			// 旧 schema 只允许 advisor 为空；从 schema 4 起成员值一律非 null。
+			if v < schemaVersionV4 && kind == "advisor" {
 				continue
 			}
 			return bad
@@ -659,7 +684,7 @@ func validateTeam(raw []byte) error {
 		if !isNum || inst != float64(int64(inst)) || inst < 1 {
 			return bad
 		}
-		if v >= schemaVersion && int(inst) != keyInstance(key) {
+		if v >= schemaVersionV4 && int(inst) != keyInstance(key) {
 			return bad
 		}
 		if r["name"] != roleName(prefix, kind, int(inst)) {
@@ -689,10 +714,10 @@ func validateTeam(raw []byte) error {
 			return bad
 		}
 	}
-	if v < schemaVersion && (roles["owner"] == nil || roles["worker"] == nil) {
+	if v < schemaVersionV4 && (roles["owner"] == nil || roles["worker"] == nil) {
 		return bad
 	}
-	if v >= schemaVersion {
+	if v >= schemaVersionV4 {
 		// schema 4 严格计数：恰好一个 Owner（O1），Worker 1..4，Advisor 0..4；不先过滤坏键再修复。
 		if counts["owner"] != 1 || roles[ownerKey] == nil || counts["worker"] < 1 || counts["worker"] > maxPerRole || counts["advisor"] > maxPerRole {
 			return bad

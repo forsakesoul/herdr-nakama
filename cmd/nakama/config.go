@@ -14,27 +14,32 @@ type config struct{ root map[string]any }
 
 func configFile() string {
 	if d := os.Getenv("HERDR_PLUGIN_CONFIG_DIR"); d != "" {
-		return filepath.Join(d, "config.json")
+		return filepath.Join(d, "config.local.json")
 	}
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		base = filepath.Join(os.Getenv("HOME"), ".config")
 	}
-	return filepath.Join(base, "nakama", "config.json")
+	return filepath.Join(base, "nakama", "config.local.json")
 }
 
-// 文件不存在视为空配置；存在但不可读/非法 JSON 则报错（不静默当作缺配置）。
+// 仅在本地文件缺失时回退旧文件，避免忽略用户选中的配置错误。
 func loadConfig() (*config, error) {
-	b, err := os.ReadFile(configFile())
+	file := configFile()
+	b, err := os.ReadFile(file)
+	if errors.Is(err, os.ErrNotExist) {
+		file = filepath.Join(filepath.Dir(file), "config.json")
+		b, err = os.ReadFile(file)
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return &config{root: map[string]any{}}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf(L("无法读取配置 %s：%v"), configFile(), err)
+		return nil, fmt.Errorf(L("无法读取配置 %s：%v"), file, err)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil || m == nil {
-		return nil, fmt.Errorf(L("配置 %s 不是合法 JSON 对象"), configFile())
+		return nil, fmt.Errorf(L("配置 %s 不是合法 JSON 对象"), file)
 	}
 	return &config{root: m}, nil
 }
@@ -72,7 +77,7 @@ func (c *config) pickEngine(role, cli string) (string, error) {
 		cand = c.profileStr(role)
 	}
 	if cand == "" {
-		return "", fmt.Errorf(L("缺少 %s 引擎配置：请在 config.json 的 default_profile.%s 填写，或用 CLI 参数指定。不内置个人 provider。"), role, role)
+		return "", fmt.Errorf(L("缺少 %s 引擎配置：请在 config.local.json 的 default_profile.%s 填写，或用 CLI 参数指定。不内置个人 provider。"), role, role)
 	}
 	return c.resolveEngine(cand, role), nil
 }

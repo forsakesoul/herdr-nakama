@@ -32,7 +32,7 @@ func TestTaskDirCreatedAndInPrompt(t *testing.T) {
 	id := e.teamID()
 	dir := filepath.Join(realPath(e.proj), ".nakama", id)
 	eq(t, e.str("task_dir"), dir, "task_dir 落盘")
-	eq(t, e.str("schema_version"), "4", "schema 3")
+	eq(t, e.str("schema_version"), "5", "写出当前 schema")
 	if !realDir(dir) {
 		t.Fatalf("任务目录未创建：%s", dir)
 	}
@@ -347,7 +347,7 @@ func TestSchemaGuardsNewFields(t *testing.T) {
 		dig(m, "roles", "owner").(map[string]any)["pane"] = ownerPane
 	})
 	e.mustRun("init", "--team", id)
-	eq(t, e.str("schema_version"), "4", "保存后升级")
+	eq(t, e.str("schema_version"), "5", "保存后升级")
 	hasNot(t, e.lastPrompt(id+"_design"), "任务目录=", "旧组 prompt 不提任务目录")
 }
 

@@ -33,9 +33,9 @@ Requires macOS and Herdr 0.9.3 or later. The install command below builds the pl
 ```sh
 # 1. Install (runs the build declared in the manifest). For local development use: go build … && herdr plugin link "$PWD" --enabled
 herdr plugin install forsakesoul/herdr-nakama
-# 2. Private config: create from config.example.json only if missing (0600), then fill in pi_provider / cc_env_file as needed (private, never commit)
-cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.json"
-[ -e "$cfg" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
+# 2. Private config: create config.local.json from the example only if neither config file exists (0600). Set your model aliases, pi_provider and cc_env_file there.
+cfg="$(herdr plugin config-dir forsakesoul.nakama)/config.local.json"
+[ -e "$cfg" ] || [ -e "${cfg%/*}/config.json" ] || (umask 077 && mkdir -p "${cfg%/*}" && curl -fsSL https://raw.githubusercontent.com/forsakesoul/herdr-nakama/main/config.example.json -o "$cfg.tmp" && mv "$cfg.tmp" "$cfg")
 # 3. Bind keys (append to ~/.config/herdr/config.toml), then reload
 herdr server reload-config
 ```
@@ -115,22 +115,7 @@ Each team has a `.nakama/<team id>/` directory inside the project that holds han
 ## Configuration
 
 Config directory: `$HERDR_PLUGIN_CONFIG_DIR` (injected by Herdr), otherwise `${XDG_CONFIG_HOME:-$HOME/.config}/nakama`.
-File: `config.json`. **Never commit real providers / paths / credentials.**
-
-```json
-{
-  "default_profile": {
-    "owner": "sol",
-    "worker": "ds",
-    "advisor": "none",
-    "engine_map": { "sol": "codex/<model>:high", "ds": { "owner": "pi/<model>:low", "worker": "pi/<model>:low", "advisor": "pi/<model>:high" } },
-    "cc_env_file": ""
-  },
-  "projects": {
-    "<repo-name>": { "prefix": "<short>", "context_file": "/abs/project-context.md", "trigger": ";xx.ctx" }
-  }
-}
-```
+Copy [config.example.json](config.example.json) to `config.local.json` in that directory. Set role defaults, model aliases, provider and local paths there. If `config.local.json` is missing, Nakama reads the existing `config.json`.
 
 - An engine is written as `<launcher>/<model>[:effort]`, or as a shorthand you define in `engine_map`.
 - `projects` gives a repository its team-name prefix and a project context file that every member receives at initialization. To let an Owner or Advisor compact natively at the threshold on its own, authorize that in this context file or in the request; otherwise it only reports the threshold and the manual /compact entry.
