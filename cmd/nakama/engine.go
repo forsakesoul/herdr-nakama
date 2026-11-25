@@ -36,7 +36,7 @@ func parseEngine(e string) (engine, bool) {
 		if g.effort == "" {
 			g.effort = "medium"
 		}
-	case "qoder", "ccenv":
+	case "qoder", "ccenv", "agy":
 		if g.model == "" || g.effort != "" {
 			return g, false
 		}
@@ -50,13 +50,15 @@ func parseEngine(e string) (engine, bool) {
 	return g, true
 }
 
-// 引擎对应的 Herdr agent 种类（集中一处）：pi→pi，cc/ccenv→claude，codex→codex，qoder→qodercli。
+// 引擎对应的 Herdr agent 种类（集中一处）：pi→pi，cc/ccenv→claude，codex→codex，qoder→qodercli，agy→agy。
 func (g engine) kind() string {
 	switch g.launcher {
 	case "codex":
 		return "codex"
 	case "qoder":
 		return "qodercli"
+	case "agy":
+		return "agy"
 	case "cc", "ccenv":
 		return "claude"
 	}
@@ -86,6 +88,8 @@ func (g engine) hint() string {
 		return fmt.Sprintf(L("确认走 Claude 官方订阅（无 ANTHROPIC_BASE_URL 覆盖）、模型为 %s，并已跳过权限检查"), m)
 	case "ccenv":
 		return fmt.Sprintf(L("确认实际为 %s 并已跳过权限检查"), g.model)
+	case "agy":
+		return fmt.Sprintf(L("确认 agy 模型为 %s，并已跳过权限检查（状态栏显示 auto 属正常）；首次在新目录启动需在 pane 内确认信任，启动期间会等待"), g.model)
 	case "pi":
 		// 提示会进入 Herdr 的 action log，不得带 provider 等私有配置值。
 		return fmt.Sprintf(L("确认 Pi 的模型为 %s、思考级别 %s，provider 与 profile 一致；已信任项目资源，工具按当前用户权限执行"), g.model, g.effort)
@@ -111,11 +115,19 @@ func (g engine) paneCommand(piProvider, ccEnv string) string {
 	return "pi --approve --provider " + posixQuote(piProvider) + " --model " + posixQuote(g.model) + " --thinking " + posixQuote(g.effort)
 }
 
-// agent start 的参数（codex/qoder）。
+// 首条 prompt 之后才上报 session 的引擎（codex、agy）：启动取证不轮询等待，init 时再固定。
+func (g engine) sessionAfterPrompt() bool {
+	return g.launcher == "codex" || g.launcher == "agy"
+}
+
+// agent start 的参数（codex/qoder/agy）。
 func (g engine) startArgs() []string {
 	if g.launcher == "codex" {
 		return []string{"--no-daemon", "--model", g.model, "-c", `model_reasoning_effort="` + g.effort + `"`,
 			"--dangerously-bypass-approvals-and-sandbox", "--no-alt-screen"}
+	}
+	if g.launcher == "agy" {
+		return []string{"--model", g.model, "--dangerously-skip-permissions"}
 	}
 	return []string{"--model", g.model, "--permission-mode", "bypass_permissions"}
 }

@@ -101,7 +101,7 @@ func (a *app) checkAnchorServer(t *Team) error {
 	return nil
 }
 
-// codex 在首次 prompt 开始会话后才上报 session，所以已冻结 session 为空时，允许在 inited 复核中
+// codex/agy 在首次 prompt 开始会话后才上报 session，所以已冻结 session 为空时，允许在 inited 复核中
 // 单向补全为观测值；terminal/pane/kind 必须完全相同，补全后 session 再变化即漂移。
 // 只用于 inited 角色的重入复核，首次冻结、rename 后与 prompt 前仍走严格比较。
 func fillSession(frozen, observed Ident) (Ident, bool) {
@@ -217,8 +217,8 @@ func (a *app) captureIdentity(t *Team, rn string) bool {
 	}
 	// cc/ccenv/pi 的 session 由 SessionStart hook 在进程被识别后才上报，qoder 也在启动几秒后才上报，
 	// 而首次冻结严格比较 session：有界等它出现，避免记成空 session、init 时被判指纹漂移。始终没有则按空记录。
-	// codex 要到首次 prompt 才有 session，不等。授权等待不计入这个轮询窗口，由 gate 的同一预算约束。
-	for tries := 1; eng.launcher != "codex" && ok && obj.ident().Session == "" && tries < pollTries(); tries++ {
+	// codex/agy 要到首次 prompt 才有 session，不等。授权等待不计入这个轮询窗口，由 gate 的同一预算约束。
+	for tries := 1; !eng.sessionAfterPrompt() && ok && obj.ident().Session == "" && tries < pollTries(); tries++ {
 		sleepFor(a.poll)
 		if o, got := a.agentGet(string(r.Pane)); got {
 			obj = o

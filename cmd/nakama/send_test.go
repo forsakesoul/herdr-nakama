@@ -547,6 +547,35 @@ func TestNoneTeamOmitsSnapshotRules(t *testing.T) {
 	hasNot(t, e.lastPrompt(id+"_execute"), "交接包要求快照时", "none 编组 worker 无快照生成规则")
 }
 
+// agy 与 codex 一样首条 prompt 后才上报 session：启动取证不得为等 session 轮询，agent get 次数应与 codex 相同。
+func TestAgySessionNotPolledAtStart(t *testing.T) {
+	gets := func(worker string) int {
+		e := newEnv(t)
+		e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "` + worker + `", "advisor": "none" }, "projects": {} }`)
+		e.mustRun("up")
+		eq(t, e.str("roles", "W1", "identity", "session"), "", "启动后冻结的 session 为空")
+		eq(t, e.count("pane", "run"), 0, "agy 与 codex 都走 agent start，不手动 pane run")
+		return e.count("agent", "get")
+	}
+	agy, codex, qoder := gets("agy/model-a"), gets("codex/gpt-6.2-sol"), gets("qoder/Qwen3.8-Flash")
+	eq(t, agy, codex, "agy 启动取证与 codex 同样不轮询 session")
+	if agy >= qoder {
+		t.Errorf("agy 的 agent get 次数 %d 应少于轮询 session 的 qoder %d", agy, qoder)
+	}
+}
+
+// agy 的 session 在初始化提示送达后才出现：init 须把它固定为身份基准。
+func TestAgyInitPinsSessionThatArrivesWithFirstPrompt(t *testing.T) {
+	t.Setenv("NAKAMA_FAKE_SESSION_ON_PROMPT", "1")
+	e := newEnv(t)
+	e.rawConfig(`{ "default_profile": { "owner": "codex/gpt-6.2-sol:high", "worker": "agy/model-a", "advisor": "none" }, "projects": {} }`)
+	e.mustRun("up")
+	id := e.teamID()
+	eq(t, e.str("roles", "W1", "identity", "session"), "", "测试前提：冻结时 session 为空")
+	has(t, e.mustRun("init", "--team", id), "READY", "初始化完成")
+	eq(t, e.str("roles", "W1", "identity", "session"), "sess-"+e.str("roles", "W1", "name"), "init 固定首次出现的 session")
+}
+
 // codex 的 session 在初始化提示送达后才出现：init 须把它固定为身份基准，之后换了会话的同一 pane 不能再发消息或读规则。
 func TestInitPinsSessionThatArrivesWithFirstPrompt(t *testing.T) {
 	t.Setenv("NAKAMA_FAKE_SESSION_ON_PROMPT", "1")

@@ -209,8 +209,7 @@ func startWait() time.Duration {
 
 func (a *app) launch(raw, name, pane string) error {
 	eng, _ := parseEngine(raw)
-	switch eng.launcher {
-	case "codex", "qoder":
+	if !eng.needsRename() {
 		return a.startAgent(name, eng.kind(), pane, eng.startArgs())
 	}
 	// env 文件路径会出现在 pane 命令文本中（不是密钥）；其内容绝不拼入命令/状态/prompt/日志。
@@ -942,7 +941,7 @@ func (a *app) initRole(t *Team, rn string) int {
 		}
 		return 2
 	}
-	// codex 收到首条输入后才上报 session：趁还持有编组锁把它固定为身份基准。
+	// codex/agy 收到首条输入后才上报 session：趁还持有编组锁把它固定为身份基准。
 	// send / rules 不取锁、不写状态，留空的话之后任何会话都能补全通过核验。
 	if r.Identity.Session == "" {
 		if o, ok := a.agentGet(string(r.Pane)); ok {

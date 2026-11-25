@@ -54,6 +54,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 - 本地未配置 `cc` 别名时，直接输入 `cc` 会使用本机 Claude Code 的默认模型和 effort。`cc/<model>` 指定模型，effort 由 Claude 决定，也可显式指定。Codex 和 Pi 省略 effort 时使用 `medium`。
 - **provider**：`pi` 角色的 provider 由 `default_profile.pi_provider` 提供（私有，勿入库）；缺则 `up` 在任何 split 之前拒绝。
 - **`ccenv` 启动器**：先在 pane 里 `source` 一个 env 文件（例如设置 `ANTHROPIC_BASE_URL` 等指向自建网关），再启动 `cc --model <model>`；`model` 必填、不接受 effort。`default_profile.cc_env_file` 指向本机普通可读文件；`up` 前校验（`-f` 且 `-r`，不读内容、不打印值），目录路径即拒绝。source 失败（含 `return` 非零）时保留非零、不启动 `cc`。启动时该路径会出现在**对应 panes 的命令文本**里（路径不是密钥），env 文件**内容**绝不会被拼入命令/状态/prompt/日志。
+- **`agy` 启动器**：`agy/<model>`，即 Google Antigravity CLI。`model` 必填。nakama 不传 `--effort`，档位通过模型 id 选择（用 `agy models` 查看）；`agy/<model>:<effort>` 写法会被拒绝。以 `--dangerously-skip-permissions` 启动，状态栏显示 `auto` 属正常。首次在新目录启动会弹信任对话框，Herdr 报 `blocked`，启动取证在等待预算内等用户在 pane 中确认。
 - `projects` 表只**引用**上下文文件路径，不复制正文；文件缺失/不可读时 `init` 停止。
 - `init` 前核对 `protocol.md` 与上下文文件的当前 sha256 等于记录值；漂移则拒绝（提示重新 `up` 新组），不自动改 hash。
 
@@ -147,7 +148,7 @@ nakama update [--check] [--yes]
 `init` 或 `[TEAM_UPDATE]` 以不明结果结束时（例如 `agent_prompt_stalled`），编组停住，不会重发。先到 pane 里看一眼，再把看到的结果告诉插件：`nakama resolve --team <id> --delivered` 会在重新核验身份后把该角色记为已初始化（或把更新记为已送达）；`--not-delivered` 清除标记，下一次 `init` 重新发送。适用时 `status` 会给出这条提示。
 
 - 只处理 `prompt`、`team_update`、`rename` 三种步骤。`split` 或启动的不明结果涉及 pane 与进程归属，不做猜测：用 `down` 解散后重建。
-- 记录 session 为空的角色现在上报了 session 时，`--not-delivered` 会被拒绝：Codex 收到首条输入才创建 session，这就是 prompt 已送达的证据。
+- 记录 session 为空的角色现在上报了 session 时，`--not-delivered` 会被拒绝：Codex 与 agy 收到首条输入才创建 session，这就是 prompt 已送达的证据。
 - 启动后取证失败不需要 `resolve`：取证是只读的，下一次 `up` / `init` 会直接重试，`up` 随后启动尚未启动的成员。
 
 ## 状态与安全
@@ -160,7 +161,7 @@ nakama update [--check] [--yes]
 - 启动取证时，每次观测（含首次）若为 `blocked`（授权/信任对话框）或 `unknown`，都在同一个等待预算内重新观察，直到离开这两种状态才冻结；`start` 返回 `agent_not_ready`（名字已保留）同样进入这一等待。预算为单次取证的 `NAKAMA_START_WAIT_SECONDS`（缺省 600 秒），中途 `unknown`/`blocked` 切换不重置；超时按启动失败处理并说明是授权等待超时。等待期间只观察、不发送输入；每个角色只提示一次。cc/ccenv/pi 在等待期间不计入 `NAKAMA_START_POLL_TRIES` 的 session 轮询窗口。
 - `init` 的 `prompt` 返回 `agent_blocked` 时输入未发出，清除 pending 并以非零退出，处理对话框后重按 `prefix+i`（或 `init`）即可；这不是 UNKNOWN。
 - 手动启动器（cc/ccenv/pi）的 session 由 SessionStart hook 在进程被识别后才上报：启动观测会在同一有界轮询（`NAKAMA_START_POLL_TRIES`）内等 session 出现再落盘，避免首次冻结把空→非空判为漂移；始终未上报则按空记录。
-- 冻结时 session 为空的角色（codex 首次 prompt 后才上报 session）：`init` 重入复核时允许把观测到的非空 session 单向补全进 identity（terminal/pane/kind 必须完全相同），补全后再变化即漂移。该例外只适用于已 inited 且未 stale 的重入角色；已 stale 的角色不会被自动清除，需人工处理（重新 up 新组）。已知上限：补全前被同终端、同 kind 的新实例替换无法区分。
+- 冻结时 session 为空的角色（codex 与 agy 首次 prompt 后才上报 session）：`init` 重入复核时允许把观测到的非空 session 单向补全进 identity（terminal/pane/kind 必须完全相同），补全后再变化即漂移。该例外只适用于已 inited 且未 stale 的重入角色；已 stale 的角色不会被自动清除，需人工处理（重新 up 新组）。已知上限：补全前被同终端、同 kind 的新实例替换无法区分。
 - 收到 SIGHUP/SIGINT/SIGTERM 后，已通过派发检查点的那一个 Herdr 操作会完成并落盘，之后不再开始新的副作用；命令以非零退出，锁由正常退出路径释放；SIGKILL 不可处理，遗留锁按「不自动接管」fail-closed，需人工核对后删除。
 - `up` 重入只在 `starting`（会产生新写操作）路径核对 protocol/context hash；launched/initialized 路径不新增 Herdr 写操作，hash 由 `init` 核对。
 - 不关闭、不改名用户既有 pane；不接管运行中的旧组。
@@ -168,13 +169,13 @@ nakama update [--check] [--yes]
 ## 电脑或 Herdr 重启后恢复编组
 
 **会发生什么。** Herdr 重启（或电脑重启）后，各角色 pane 的 `pane_id` 与 kind 通常保持，但 `terminal_id` 会全部改变（锚点也一样），
-任务名可能被清空，或被外部工具（Bridge）自动改名为 `<项目 slug>-<terminal 摘要>`。claude 的会话通常仍是同一个；codex 的会话只在首次 prompt 后才出现。
+任务名可能被清空，或被外部工具（Bridge）自动改名为 `<项目 slug>-<terminal 摘要>`。claude 的会话通常仍是同一个；codex 与 agy 的会话只在首次 prompt 后才出现。
 此时 `status` 能看到角色，但 `init` / `prompt` 的 terminal 与名称检查都会拒绝，编组对 runtime 不可用。
 
 **怎么做。**
 1. 先只读预检（零写入）：`nakama rebind --team <id> --preflight`。它逐角色、逐锚点输出 `terminal 旧 → 新`、session 与任务名的差异。
 2. 按输出补充确认参数后执行：`nakama rebind --team <id> --confirm-anchor <新锚点 terminal> [--confirm-session <成员键|anchor>=<session>]...`。成员键形如 O1、W1、W2、A1…（例如 `--confirm-session W2=<session>` 确认第二个 Worker 的 session）。
-   - `--confirm-session` 只用于记录 session 为空的角色（例如 codex 首次 prompt 前冻结的），值必须等于本次观测到的非空 session。
+   - `--confirm-session` 只用于记录 session 为空的角色（例如 codex、agy 首次 prompt 前冻结的），值必须等于本次观测到的非空 session。
    - `--confirm-anchor` 只用于没有 identity 的 shell 锚点，值必须等于本次观测到的新 terminal。
    - 记录 session 非空的角色不接受确认覆盖：观测必须与记录相等。
    - `--retire <成员键>`（可重复）用于已无法找回的 Worker/Advisor（pane 已关闭，或会话已换）：同一次重绑中把它移入 `retired`（与 `drop` 相同，pane 保留、不关闭），不观测它，其余成员照常重绑。不能停用 Owner，停用后至少保留一个 Worker。提交后 `team_rev` 只加一，在册成员待收 `[TEAM_UPDATE]`，运行 `init` 投递。重启后锚点 terminal 已变，`drop` 会因锚点不一致而拒绝，所以停用并入 `rebind`。
@@ -239,6 +240,7 @@ go build -trimpath -o bin/nakama ./cmd/nakama
 - `send` 与 `down` 已在真实 Herdr 0.9.5 上用 Claude Code、Codex、Pi、Qoder 成员端到端跑过：每种引擎都收到交接、完成任务并自己执行 `send` 回报；另外覆盖了收件人忙碌时的有界等待及随后的 `NOT_SENT`、`--resend`、用 `--no-deliver` 答复的同步请求，以及 30 个并发发送。未在真实 Herdr 上取样的有：菜单内重绑，以及 `auto_init` 紧接启动后的时序。
 - 插件对成员状态的全部了解都来自 Herdr 的状态识别。Qoder CLI 1.1.89 匹配不到 Herdr 识别清单里的任何规则，始终被报告为 `idle`：正在工作的 Qoder 照样会收到 prompt，`--reply sync` 或 `init` 可能在 prompt 已送达的情况下以 `agent_prompt_stalled` 结束（用 `resolve` 处理）。Codex 出现过一轮进行中被短暂报成空闲的情况，所以 `send` 要求连续两次观测到空闲才投递，这只能缩小窗口，不能消除。
 - 被 Herdr 报成空闲的启动对话框会吞掉输入。pane 屏幕上出现 `enter … · esc …` 形式的对话框页脚时 `init` 会拒绝（在 Codex 上见过目录信任、钩子审查等三种）；这是对屏幕文字的匹配，其他对话框抓不到，Qoder 的目录信任对话框就没有可区分的页脚。另外见过仍在启动的 Codex 接收了初始化 prompt 却没有回复。
+- agy 1.5.16 已在 Herdr 0.9.5 上作为 nakama 成员跑过 `up`（含信任对话框等待）、`init`（首条 prompt 后固定 session）、`status` 与 `down`；尚未实测成员间 `send` 往返、经 nakama 流程的 `/compact` 与 rebind。直接在 Herdr 上另测过 `/compact` 与跳过权限可用。
 - `send` 先查收件人状态再投递；两个发件人同时看到同一收件人空闲时都会投递，第二条 prompt 到达时收件人已在 working。Herdr 没有“比较后发送”的语义，接收方仍依赖协议里“同一 req 只推进一次”的规则。
 - 手动启动器（pi/cc/ccenv）首次冻结要求「split 时记录的 terminal_id == 首次 agent get 的 terminal_id」+「kind 等于期望种类」+「实例未被他人具名」；任一不满足即 UNKNOWN 停止。唯一名称兼容项是外部 Bridge 的精确自动名（项目目录 slug + terminal_id 的 SHA-256 前 4 位）：完整启动指纹仍一致时允许替换为角色名；其他名字、缺少启动指纹或指纹漂移仍拒绝。时间戳用于区分创建批次，这项兼容用于避免自动命名阻断 init。
 - 半组补建只在 pane 占用状态为 `idle`（确证 `agent_not_found`）时启动；`occupied` 与 `unknown`（get 失败/对象不完整）都在启动前非零终止。

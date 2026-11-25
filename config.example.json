@@ -9,6 +9,7 @@
       "sol": "codex/gpt-6.2-sol:high",
       "luna": "codex/gpt-6-luna:max",
       "qoder": "qoder/Qwen3.8-Flash",
+      "agy": "agy/gemini-4-neon-high",
       "cc": "cc/claude-opus-5-5:medium",
       "claude": {
         "owner": "cc/claude-opus-5-5:medium",

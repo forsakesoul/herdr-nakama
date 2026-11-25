@@ -348,7 +348,7 @@ func (a *app) cmdResolve(args []string) error {
 		}
 		r.Inited = true
 	}
-	// Codex 收到首条输入后才有 session：记录为空而现在观测到了，就是已送达的证据，不接受“未送达”。
+	// Codex/agy 收到首条输入后才有 session：记录为空而现在观测到了，就是已送达的证据，不接受“未送达”。
 	if no && p.Step == "prompt" && r.Identity != nil {
 		if o, ok := a.agentGet(string(r.Pane)); ok {
 			if _, arrived := fillSession(*r.Identity, o.ident()); arrived {
