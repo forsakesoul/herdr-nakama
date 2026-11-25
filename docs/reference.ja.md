@@ -54,6 +54,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 - `cc` の別名を設定していない場合、`cc` はローカルの Claude Code の既定値を使います。`cc/<model>` でモデルを指定でき、effort は明示するか Claude の既定値に任せます。Codex と Pi では effort を省略すると `medium` が使われます。
 - **provider**：`pi` ロールの provider は `default_profile.pi_provider` から取得します（非公開、コミット禁止）。未設定なら `up` は split の前に拒否します。
 - **`ccenv` ランチャー**：pane 内で env ファイルを `source`（例：`ANTHROPIC_BASE_URL` などで自前のゲートウェイを指定）してから `cc --model <model>` を起動します。`model` は必須で effort は受け付けません。`default_profile.cc_env_file` はこのマシン上の通常の読み取り可能なファイルを指す必要があり、`up` の前に検査されます（`-f` かつ `-r`。内容は読まず表示もしない）。ディレクトリは拒否します。source に失敗した場合（非ゼロの `return` を含む）は非ゼロのまま `cc` を起動しません。パスは**該当 pane のコマンド文字列**に現れます（パスは秘密情報ではありません）が、env ファイルの**内容**がコマンド / 状態 / プロンプト / ログに入ることはありません。
+- **`agy` ランチャー**：`agy/<model>`（Google Antigravity CLI）で起動します。`model` は必須で effort は受け付けません（effort の段階はモデル ID に含まれます。`agy models` で確認）。`--dangerously-skip-permissions` 付きで起動し、ステータスバーに `auto` と表示されるのは正常です。新しいディレクトリで初めて起動すると信頼ダイアログが出て、Herdr は `blocked` と報告します。起動時の確認は待機予算内で、pane 上でユーザーが確認するのを待ちます。
 - `projects` テーブルはコンテキストファイルのパスを**参照**するだけで、本文はコピーしません。ファイルが存在しない / 読めない場合 `init` は停止します。
 - `init` の前に `protocol.md` とコンテキストファイルの現在の sha256 が記録値と一致することを確認します。ずれていれば拒否し（新しいチームを `up` するよう案内）、ハッシュを自動更新することはありません。
 
@@ -147,7 +148,7 @@ nakama update [--check] [--yes]
 `init` や `[TEAM_UPDATE]` が結果不明で終わった場合（例：`agent_prompt_stalled`）、チームは停止し、再送は行われません。pane を確認してから、見た結果をプラグインに伝えます。`nakama resolve --team <id> --delivered` は、識別を再検証したうえでそのロールを初期化済みとして（または更新を配信済みとして）記録します。`--not-delivered` はマークを消し、次の `init` で再送されます。該当する場合は `status` がこの案内を表示します。
 
 - 対象は `prompt`、`team_update`、`rename` のステップだけです。`split` や起動の結果不明は pane とプロセスの帰属に関わるため推測せず、`down` で解散して作り直します。
-- session が空で記録されたロールが現在 session を報告している場合、`--not-delivered` は拒否されます。Codex は最初の入力で session を作るため、それが prompt の届いた証拠になります。
+- session が空で記録されたロールが現在 session を報告している場合、`--not-delivered` は拒否されます。Codex と agy は最初の入力で session を作るため、それが prompt の届いた証拠になります。
 - 起動後の識別取得の失敗には `resolve` は不要です。取得は読み取り専用なので、次の `up` / `init` がそのまま再試行し、`up` はまだ起動していないメンバーを続けて起動します。
 
 ## 状態と安全性
@@ -160,7 +161,7 @@ nakama update [--check] [--yes]
 - 起動時の取得では、各観測（初回を含む）が `blocked`（認可 / 信頼ダイアログ）または `unknown` の場合、同じ待機予算内で再観測し、その状態を抜けてから固定します。`start` が `agent_not_ready`（名前は確保済み）を返した場合も同じ待機に入ります。予算は 1 回の取得あたり `NAKAMA_START_WAIT_SECONDS`（既定 600 秒）で、途中で `unknown`/`blocked` が切り替わってもリセットされません。タイムアウトは起動失敗として扱い、認可待ちのタイムアウトであることを示します。待機中は観測のみで入力は送らず、各ロールにつき 1 回だけ通知します。cc/ccenv/pi の待機時間は `NAKAMA_START_POLL_TRIES` の session ポーリング枠に含めません。
 - `init` の `prompt` が `agent_blocked` を返した場合、入力は送信されていません。pending をクリアして非ゼロで終了するので、ダイアログを処理してから `prefix+i`（または `init`）を再実行してください。これは UNKNOWN ではありません。
 - 手動ランチャー（cc/ccenv/pi）の session は、プロセスが認識された後に SessionStart フックによって報告されます。起動時の観測は同じ有限ポーリング（`NAKAMA_START_POLL_TRIES`）内で session が現れるのを待ってから永続化し、初回の固定で空 → 非空をずれと判定しないようにします。最後まで報告されなければ空として記録します。
-- 固定時に session が空だったロール（codex は最初の prompt 後に session を報告）：`init` の再入時の再検証で、観測された非空の session を identity に一方向で補完できます（terminal/pane/kind は完全一致が必要）。補完後の変化はずれとみなします。この例外は inited 済みで stale でない再入ロールにのみ適用されます。stale になったロールは自動でクリアされず、手動対応（新しいチームを up）が必要です。既知の限界：補完前に同じターミナル・同じ kind の新しいインスタンスに置き換えられた場合は区別できません。
+- 固定時に session が空だったロール（codex と agy は最初の prompt 後に session を報告）：`init` の再入時の再検証で、観測された非空の session を identity に一方向で補完できます（terminal/pane/kind は完全一致が必要）。補完後の変化はずれとみなします。この例外は inited 済みで stale でない再入ロールにのみ適用されます。stale になったロールは自動でクリアされず、手動対応（新しいチームを up）が必要です。既知の限界：補完前に同じターミナル・同じ kind の新しいインスタンスに置き換えられた場合は区別できません。
 - SIGHUP/SIGINT/SIGTERM を受けると、ディスパッチのチェックポイントを通過済みの Herdr 操作 1 件は完了して永続化され、その後は新しい副作用を開始しません。コマンドは非ゼロで終了し、ロックは通常の終了経路で解放されます。SIGKILL は処理できず、残留ロックは「自動で引き継がない」原則に従いフェイルクローズするため、手動確認の上で削除が必要です。
 - `up` の再入は `starting`（新たな書き込みが発生する）経路でのみ protocol/context のハッシュを確認します。launched/initialized 経路は Herdr への書き込みを追加せず、ハッシュは `init` が確認します。
 - ユーザーの既存 pane を閉じたり改名したりせず、実行中の古いチームを引き継ぐこともありません。
@@ -168,13 +169,13 @@ nakama update [--check] [--yes]
 ## コンピューターまたは Herdr の再起動後にチームを復元する
 
 **何が起きるか。** Herdr（またはコンピューター）の再起動後、各ロール pane の `pane_id` と kind は通常維持されますが、`terminal_id` はすべて変わります（アンカーも同様）。
-タスク名はクリアされるか、外部ツール（Bridge）によって `<プロジェクト slug>-<terminal ダイジェスト>` に自動改名されることがあります。claude の会話は通常同じものが続き、codex の session は最初の prompt 後にのみ現れます。
+タスク名はクリアされるか、外部ツール（Bridge）によって `<プロジェクト slug>-<terminal ダイジェスト>` に自動改名されることがあります。claude の会話は通常同じものが続き、codex と agy の session は最初の prompt 後にのみ現れます。
 この時 `status` ではロールが見えますが、`init` / `prompt` の terminal と名前のチェックが拒否するため、チームはランタイムから使えなくなります。
 
 **手順。**
 1. まず読み取り専用のプリフライト（書き込みゼロ）を実行：`nakama rebind --team <id> --preflight`。ロールとアンカーごとに `terminal 旧 → 新`、session とタスク名の差分を出力します。
 2. 出力に従って確認引数を加えて実行：`nakama rebind --team <id> --confirm-anchor <新しいアンカーの terminal> [--confirm-session <メンバーキー|anchor>=<session>]...`。メンバーキーは O1、W1、W2、A1… の形です（例：`--confirm-session W2=<session>` は 2 番目の Worker の session を確認します）。
-   - `--confirm-session` は記録された session が空のロール（例：最初の prompt 前に固定された codex）専用で、値は今回観測された非空の session と一致する必要があります。
+   - `--confirm-session` は記録された session が空のロール（例：最初の prompt 前に固定された codex や agy）専用で、値は今回観測された非空の session と一致する必要があります。
    - `--confirm-anchor` は identity を持たないシェルアンカー専用で、値は今回観測された新しい terminal と一致する必要があります。
    - 記録された session が非空のロールは確認による上書きを受け付けず、観測値が記録と一致する必要があります。
    - `--retire <メンバーキー>`（繰り返し可）は取り戻せない Worker / Advisor（pane が閉じられた、またはセッションが替わった）用です。同じ再バインドの中でそのメンバーを `retired` に移し（`drop` と同じく pane は残し、閉じない）、観測は行わず、他のメンバーは通常どおり再バインドします。Owner は外せず、Worker は少なくとも 1 人残す必要があります。コミット時に `team_rev` は 1 だけ増え、在籍メンバーに `[TEAM_UPDATE]` が保留されるので `init` で配信します。再起動後はアンカーの terminal が変わっているため `drop` はアンカー検査で拒否されます。そのため外す操作を `rebind` に含めています。
@@ -239,6 +240,7 @@ go build -trimpath -o bin/nakama ./cmd/nakama
 - `send` と `down` は、Claude Code、Codex、Pi、Qoder のメンバーを使って実際の Herdr 0.9.5 上でエンドツーエンドに実行しました。どのエンジンも引き継ぎを受け取り、作業を行い、自分で `send` を実行して報告しました。ほかに、working の受信者に対する有限の待機とその後の `NOT_SENT`、`--resend`、`--no-deliver` で回答する同期リクエスト、30 件の並行送信も確認しています。実際の Herdr で採取していないもの：メニューからの再バインドと、起動直後の `auto_init` のタイミング。
 - プラグインがメンバーの状態について知っていることは、すべて Herdr の状態検出に基づきます。Qoder CLI 1.1.89 は Herdr の検出マニフェストのどのルールにも一致せず、常に `idle` と報告されます。そのため作業中の Qoder にも prompt が届き、`--reply sync` や `init` は prompt が届いていても `agent_prompt_stalled` で終わることがあります（`resolve` で処理します）。Codex はターンの途中で一時的に idle と報告されたことがあるため、`send` は idle を 2 回続けて観測してから配信します。これは窓を狭めるだけで、なくすことはできません。
 - Herdr が idle と報告する起動時のダイアログは入力を飲み込みます。pane の画面に `enter … · esc …` 形式のダイアログのフッターがあると `init` は拒否します（Codex でフォルダー信頼、フック確認など 3 種類を確認）。これは画面の文字との照合なので、ほかのダイアログは検出できません。Qoder のフォルダー信頼ダイアログには区別できるフッターがありません。また、起動途中の Codex が初期化 prompt を受け取ったのに返信しなかった例もあります。
+- agy 1.5.16 は Herdr 0.9.5 上で nakama のメンバーとして `up`（信頼ダイアログでの待機を含む）、`init`（最初の prompt 後に session を固定）、`status`、`down` を実行済みです。メンバー間の `send` の往復、nakama の流れでの `/compact`、rebind は未確認です。`/compact` と権限スキップは Herdr 上で直接別途確認しています。
 - `send` は受信者の状態を確認してから配信します。2 つの送信者が同じ受信者を同時に idle と観測すると両方が配信し、2 つ目の prompt は受信者がすでに working のときに届きます。Herdr には「比較してから送信」の仕組みがないため、受信側は引き続き「同じ req は一度だけ進める」というプロトコルの規則に依存します。
 - 手動ランチャー（pi/cc/ccenv）の初回固定には「split 時に記録した terminal_id == 最初の agent get の terminal_id」+「kind が期待する種類と一致」+「インスタンスが他者に命名されていない」が必要で、いずれかを満たさなければ UNKNOWN で停止します。唯一の名前互換は外部 Bridge の正確な自動名（プロジェクトディレクトリの slug + terminal_id の SHA-256 先頭 4 桁）で、完全な起動フィンガープリントが一致している間はロール名に置き換えられます。それ以外の名前、起動フィンガープリントの欠落、フィンガープリントのずれは引き続き拒否します。タイムスタンプは作成バッチの区別に使い、この互換は自動命名が init を妨げないためのものです。
 - 作りかけのチームの補完は、pane の占有状態が `idle`（`agent_not_found` を確認済み）の場合にのみ起動します。`occupied` と `unknown`（get 失敗 / オブジェクト不完全）はいずれも起動前に非ゼロで終了します。

@@ -89,6 +89,7 @@ func TestParseEngine(t *testing.T) {
 		"cc/haiku":                  {"cc", "haiku", ""},
 		"ccenv/model-x[1M]":         {"ccenv", "model-x[1M]", ""},
 		"qoder/Qwen3.8-Flash":       {"qoder", "Qwen3.8-Flash", ""},
+		"agy/gemini-4-neon-high":    {"agy", "gemini-4-neon-high", ""},
 	}
 	for in, want := range ok {
 		got, valid := parseEngine(in)
@@ -96,12 +97,12 @@ func TestParseEngine(t *testing.T) {
 			t.Errorf("%s → %+v,%v，期望 %+v", in, got, valid, want)
 		}
 	}
-	for _, in := range []string{"", "codex", "codex/m\nx", "pi", "cc:high", "ccenv/m:high", "qoder/m:low", "x/y", "pi/m with space", "pi/m:Low"} {
+	for _, in := range []string{"", "codex", "codex/m\nx", "pi", "cc:high", "ccenv/m:high", "qoder/m:low", "x/y", "pi/m with space", "pi/m:Low", "agy", "agy/m:high"} {
 		if _, valid := parseEngine(in); valid {
 			t.Errorf("%q 应非法", in)
 		}
 	}
-	for in, kind := range map[string]string{"codex/m": "codex", "qoder/m": "qodercli", "cc": "claude", "ccenv/m": "claude", "pi/m": "pi"} {
+	for in, kind := range map[string]string{"codex/m": "codex", "qoder/m": "qodercli", "cc": "claude", "ccenv/m": "claude", "pi/m": "pi", "agy/m": "agy"} {
 		e, _ := parseEngine(in)
 		eq(t, e.kind(), kind, "kind("+in+")")
 	}
@@ -236,7 +237,11 @@ func TestStartArgs(t *testing.T) {
 		`--no-daemon --model gpt-6.2-sol -c model_reasoning_effort="max" --dangerously-bypass-approvals-and-sandbox --no-alt-screen`, "codex 参数")
 	qd, _ := parseEngine("qoder/Qwen3.8-Flash")
 	eq(t, strings.Join(qd.startArgs(), " "), "--model Qwen3.8-Flash --permission-mode bypass_permissions", "qoder 参数")
-	for in, kind := range map[string]string{"codex/m": "codex", "qoder/m": "qoder", "ccenv/m": "ccenv"} {
+	ag, _ := parseEngine("agy/gemini-4-neon-high")
+	eq(t, strings.Join(ag.startArgs(), " "), "--model gemini-4-neon-high --dangerously-skip-permissions", "agy 参数")
+	eq(t, ag.sessionAfterPrompt(), true, "agy 首条 prompt 后才上报 session")
+	eq(t, qd.sessionAfterPrompt(), false, "qoder 启动后即上报 session")
+	for in, kind := range map[string]string{"codex/m": "codex", "qoder/m": "qoder", "ccenv/m": "ccenv", "agy/m": "agy"} {
 		e, _ := parseEngine(in)
 		if e.hint() == "" {
 			t.Errorf("%s 缺少启动提示", kind)
