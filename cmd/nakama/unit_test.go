@@ -239,6 +239,7 @@ func TestStartArgs(t *testing.T) {
 	eq(t, strings.Join(qd.startArgs(), " "), "--model Qwen3.8-Flash --permission-mode bypass_permissions", "qoder 参数")
 	ag, _ := parseEngine("agy/gemini-4-neon-high")
 	eq(t, strings.Join(ag.startArgs(), " "), "--model gemini-4-neon-high --dangerously-skip-permissions", "agy 参数")
+	eq(t, cx.sessionAfterPrompt(), true, "codex 首条 prompt 后才上报 session")
 	eq(t, ag.sessionAfterPrompt(), true, "agy 首条 prompt 后才上报 session")
 	eq(t, qd.sessionAfterPrompt(), false, "qoder 启动后即上报 session")
 	for in, kind := range map[string]string{"codex/m": "codex", "qoder/m": "qoder", "ccenv/m": "ccenv", "agy/m": "agy"} {

@@ -54,7 +54,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 - 本地未配置 `cc` 别名时，直接输入 `cc` 会使用本机 Claude Code 的默认模型和 effort。`cc/<model>` 指定模型，effort 由 Claude 决定，也可显式指定。Codex 和 Pi 省略 effort 时使用 `medium`。
 - **provider**：`pi` 角色的 provider 由 `default_profile.pi_provider` 提供（私有，勿入库）；缺则 `up` 在任何 split 之前拒绝。
 - **`ccenv` 启动器**：先在 pane 里 `source` 一个 env 文件（例如设置 `ANTHROPIC_BASE_URL` 等指向自建网关），再启动 `cc --model <model>`；`model` 必填、不接受 effort。`default_profile.cc_env_file` 指向本机普通可读文件；`up` 前校验（`-f` 且 `-r`，不读内容、不打印值），目录路径即拒绝。source 失败（含 `return` 非零）时保留非零、不启动 `cc`。启动时该路径会出现在**对应 panes 的命令文本**里（路径不是密钥），env 文件**内容**绝不会被拼入命令/状态/prompt/日志。
-- **`agy` 启动器**：`agy/<model>`，即 Google Antigravity CLI。`model` 必填、不接受 effort（档位在模型 id 里，用 `agy models` 查看）。以 `--dangerously-skip-permissions` 启动，状态栏显示 `auto` 属正常。首次在新目录启动会弹信任对话框，Herdr 报 `blocked`，启动取证在等待预算内等用户在 pane 中确认。
+- **`agy` 启动器**：`agy/<model>`，即 Google Antigravity CLI。`model` 必填。nakama 不传 `--effort`，档位通过模型 id 选择（用 `agy models` 查看）；`agy/<model>:<effort>` 写法会被拒绝。以 `--dangerously-skip-permissions` 启动，状态栏显示 `auto` 属正常。首次在新目录启动会弹信任对话框，Herdr 报 `blocked`，启动取证在等待预算内等用户在 pane 中确认。
 - `projects` 表只**引用**上下文文件路径，不复制正文；文件缺失/不可读时 `init` 停止。
 - `init` 前核对 `protocol.md` 与上下文文件的当前 sha256 等于记录值；漂移则拒绝（提示重新 `up` 新组），不自动改 hash。
 

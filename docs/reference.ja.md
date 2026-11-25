@@ -54,7 +54,7 @@ herdr plugin action list --plugin forsakesoul.nakama
 - `cc` の別名を設定していない場合、`cc` はローカルの Claude Code の既定値を使います。`cc/<model>` でモデルを指定でき、effort は明示するか Claude の既定値に任せます。Codex と Pi では effort を省略すると `medium` が使われます。
 - **provider**：`pi` ロールの provider は `default_profile.pi_provider` から取得します（非公開、コミット禁止）。未設定なら `up` は split の前に拒否します。
 - **`ccenv` ランチャー**：pane 内で env ファイルを `source`（例：`ANTHROPIC_BASE_URL` などで自前のゲートウェイを指定）してから `cc --model <model>` を起動します。`model` は必須で effort は受け付けません。`default_profile.cc_env_file` はこのマシン上の通常の読み取り可能なファイルを指す必要があり、`up` の前に検査されます（`-f` かつ `-r`。内容は読まず表示もしない）。ディレクトリは拒否します。source に失敗した場合（非ゼロの `return` を含む）は非ゼロのまま `cc` を起動しません。パスは**該当 pane のコマンド文字列**に現れます（パスは秘密情報ではありません）が、env ファイルの**内容**がコマンド / 状態 / プロンプト / ログに入ることはありません。
-- **`agy` ランチャー**：`agy/<model>`（Google Antigravity CLI）で起動します。`model` は必須で effort は受け付けません（effort の段階はモデル ID に含まれます。`agy models` で確認）。`--dangerously-skip-permissions` 付きで起動し、ステータスバーに `auto` と表示されるのは正常です。新しいディレクトリで初めて起動すると信頼ダイアログが出て、Herdr は `blocked` と報告します。起動時の確認は待機予算内で、pane 上でユーザーが確認するのを待ちます。
+- **`agy` ランチャー**：`agy/<model>`（Google Antigravity CLI）で起動します。`model` は必須です。nakama は `--effort` を渡さず、段階はモデル ID で選びます（`agy models` で確認）。`agy/<model>:<effort>` の形式は拒否されます。`--dangerously-skip-permissions` 付きで起動し、ステータスバーに `auto` と表示されるのは正常です。新しいディレクトリで初めて起動すると信頼ダイアログが出て、Herdr は `blocked` と報告します。起動時の確認は待機予算内で、pane 上でユーザーが確認するのを待ちます。
 - `projects` テーブルはコンテキストファイルのパスを**参照**するだけで、本文はコピーしません。ファイルが存在しない / 読めない場合 `init` は停止します。
 - `init` の前に `protocol.md` とコンテキストファイルの現在の sha256 が記録値と一致することを確認します。ずれていれば拒否し（新しいチームを `up` するよう案内）、ハッシュを自動更新することはありません。
 

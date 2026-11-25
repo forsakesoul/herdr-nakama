@@ -284,7 +284,7 @@ func fakeHerdr(args []string) {
 		if code := os.Getenv("FAKE_PROMPT_ERROR"); code != "" {
 			errOut(code)
 		}
-		// codex：首条输入送达后才有 session。
+		// codex/agy：首条输入送达后才有 session。
 		if os.Getenv("NAKAMA_FAKE_SESSION_ON_PROMPT") != "" {
 			rows := readRows(names)
 			for i := range rows {

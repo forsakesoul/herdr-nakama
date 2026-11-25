@@ -557,7 +557,11 @@ func TestAgySessionNotPolledAtStart(t *testing.T) {
 		eq(t, e.count("pane", "run"), 0, "agy 与 codex 都走 agent start，不手动 pane run")
 		return e.count("agent", "get")
 	}
-	eq(t, gets("agy/model-a"), gets("codex/gpt-6.2-sol"), "agy 启动取证与 codex 同样不轮询 session")
+	agy, codex, qoder := gets("agy/model-a"), gets("codex/gpt-6.2-sol"), gets("qoder/Qwen3.8-Flash")
+	eq(t, agy, codex, "agy 启动取证与 codex 同样不轮询 session")
+	if agy >= qoder {
+		t.Errorf("agy 的 agent get 次数 %d 应少于轮询 session 的 qoder %d", agy, qoder)
+	}
 }
 
 // agy 的 session 在初始化提示送达后才出现：init 须把它固定为身份基准。

@@ -209,8 +209,7 @@ func startWait() time.Duration {
 
 func (a *app) launch(raw, name, pane string) error {
 	eng, _ := parseEngine(raw)
-	switch eng.launcher {
-	case "codex", "qoder", "agy":
+	if !eng.needsRename() {
 		return a.startAgent(name, eng.kind(), pane, eng.startArgs())
 	}
 	// env 文件路径会出现在 pane 命令文本中（不是密钥）；其内容绝不拼入命令/状态/prompt/日志。
