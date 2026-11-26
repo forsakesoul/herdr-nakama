@@ -19,7 +19,11 @@ jobs:
   test:
     name: Go ${{ matrix.go }} (macOS)
     # The plugin targets macOS only (tty_darwin.go, herdr-plugin.toml platforms).
-    runs-on: macos-latest
+    # This is a public repo, so a fork PR must never reach the self-hosted machine:
+    # PR runs stay on GitHub-hosted macOS, only push/workflow_dispatch (collaborators
+    # only) go to the self-hosted runner. GitHub-hosted minutes are free for public
+    # repos, so PR coverage costs nothing.
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["macos-latest"]') || fromJSON('["self-hosted","macos","arm64","xcode"]') }}
     strategy:
       fail-fast: false
       matrix:
