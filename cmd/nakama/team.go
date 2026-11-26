@@ -696,6 +696,9 @@ func (a *app) cmdInit(args []string) error {
 	if err != nil {
 		return a.fail("%v", err)
 	}
+	if t.RebindPending != nil {
+		return a.fail(L("编组 %s 有未完成的 rebind 计划；先重跑 rebind 对账，或 rebind --discard-pending 放弃后再 init。"), id)
+	}
 	if !a.pendingGuard(t) {
 		return a.fail(L("编组 %s 有未确认副作用（UNKNOWN），不重发；请人工 get/read 核对。"), id)
 	}
@@ -740,7 +743,7 @@ func (a *app) cmdInit(args []string) error {
 				// 重启后的候选只提示、不标 stale：stale 会阻断 rebind，且 stale 从不自动清除。
 				if label, _ := a.rebindRoleBinding(r); label == "candidate" {
 					overall = false
-					a.errf(L("%s 的 pane 与 kind 仍匹配，但 terminal 或任务名已变化（可能是 Herdr 重启后）；候选（不保证可重绑）：可能需要显式 rebind --team %s，请先 --preflight 核对。未写入状态，不重发。"), rn, id)
+					a.errf(L("%s 的 pane 与 kind 仍匹配，但 terminal、任务名或 session 已变化（可能是 Herdr 重启或 Agent 换会话后）；候选（不保证可重绑）：可能需要显式 rebind --team %s，请先 --preflight 核对。未写入状态，不重发。"), rn, id)
 					continue
 				}
 				overall = false
@@ -805,7 +808,7 @@ func (a *app) resolveTeam(cliTeam, cliPane, cliCwd string) (string, error) {
 		id = ids[0]
 	}
 	if !a.st.exists(id) {
-		return "", a.fail(L("编组不存在：%s"), id)
+		return "", a.fail("%v", a.st.notFound(id))
 	}
 	return id, nil
 }
@@ -981,7 +984,7 @@ func (a *app) cmdStatus(args []string) error {
 	any := false
 	for _, id := range ids {
 		if !a.st.exists(id) {
-			a.errf(L("编组不存在：%s"), id)
+			a.errf("%v", a.st.notFound(id))
 			continue
 		}
 		t, err := a.st.load(id)

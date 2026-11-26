@@ -260,7 +260,7 @@
 <!-- role:owner -->
 ### Owner 压缩
 
-- 核对任务/server/Worker 名称→pane、引擎、停止写入且 idle/done、输入框处于普通编辑状态后，记录压缩前事件或输出边界；Codex、Claude Code（cc/ccenv）、Pi 的原生 /compact 由 Owner 单独投递一次，可用 herdr agent prompt "<实际 Worker 名称>" '/compact' --wait --timeout 120000；不向 working/blocked/unknown Worker 发命令，不让 Worker 用普通回复模拟压缩。
+- 核对任务/server/Worker 名称→pane、引擎、停止写入且 idle/done、输入框处于普通编辑状态后，记录压缩前事件或输出边界；Codex、Claude Code（cc/ccenv）、Pi、agy 的原生 /compact 由 Owner 单独投递一次，可用 herdr agent prompt "<实际 Worker 名称>" '/compact' --wait --timeout 120000；不向 working/blocked/unknown Worker 发命令，不让 Worker 用普通回复模拟压缩。
 - 投递成功或 idle 不能证明压缩完成，首次路径须运行核验；get/read 核对本次原生完成输出或压缩事件，失败/超时先补读原始错误和状态、不盲目重发，保留恢复信息等待恢复，不自动清空会话或换 Worker。
 - 确认完成后，Owner 以新唯一请求号关联原整理请求，带有效交接包、职责胶囊、恢复信息（含取消标记与失效指令）、最新编组、resumes=当前 CONTEXT_READY 通知 req 及 execution_request=原执行交接消息 req 发 [CONTEXT_RESUME]；Worker 完成或停点始终 responds_to=execution_request，不关联恢复消息或中途答疑；先只读复核职责、取消状态、resumes、身份、版本及 git status/diff/HEAD 一致再继续，发现漂移则 BLOCKED。
 - 不支持的引擎保留恢复信息并说明缺口；独立新任务由 Owner 在上一任务交付后安排新会话及完整初始化，不自动复用旧任务历史。

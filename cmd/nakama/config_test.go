@@ -128,3 +128,22 @@ func TestPickEngine(t *testing.T) {
 		t.Error("CLI 与 profile 都缺失时应报错，不内置默认引擎")
 	}
 }
+
+// 状态目录回退：只有 Herdr 插件目录已存在时才用它；不存在则落回旧目录，两套目录互不合并。
+func TestStateDirFallbackToPluginDir(t *testing.T) {
+	home := t.TempDir()
+	for _, k := range []string{"HERDR_PLUGIN_STATE_DIR", "XDG_STATE_HOME"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("HOME", home)
+	pluginDir := filepath.Join(home, ".local", "state", "herdr", "plugins", "forsakesoul.nakama")
+	eq(t, newStore().dir, filepath.Join(home, ".local", "state", "nakama"), "插件目录不存在时回落旧目录")
+
+	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	eq(t, newStore().dir, pluginDir, "插件目录已存在时优先使用")
+
+	t.Setenv("HERDR_PLUGIN_STATE_DIR", "/explicit")
+	eq(t, newStore().dir, "/explicit", "显式 HERDR_PLUGIN_STATE_DIR 优先于插件目录")
+}

@@ -338,16 +338,31 @@ func (t *Team) migrateLegacy(lr legacyRoles) error {
 
 type store struct{ dir string }
 
+// 插件 id 与 herdr-plugin.toml:1 一致；Herdr 发布版把插件状态放在 <base>/herdr/plugins/<id>。
+const pluginStateID = "forsakesoul.nakama"
+
 func newStore() store {
-	d := os.Getenv("HERDR_PLUGIN_STATE_DIR")
-	if d == "" {
-		base := os.Getenv("XDG_STATE_HOME")
-		if base == "" {
-			base = filepath.Join(os.Getenv("HOME"), ".local", "state")
-		}
-		d = filepath.Join(base, "nakama")
+	if d := os.Getenv("HERDR_PLUGIN_STATE_DIR"); d != "" {
+		return store{dir: d}
 	}
-	return store{dir: d}
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		base = filepath.Join(os.Getenv("HOME"), ".local", "state")
+	}
+	if plugin := filepath.Join(base, "herdr", "plugins", pluginStateID); isDir(plugin) {
+		return store{dir: plugin}
+	}
+	return store{dir: filepath.Join(base, "nakama")}
+}
+
+func isDir(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
+}
+
+// 找不到编组的统一报错：附当前状态目录，便于判断是否落在了另一套目录。
+func (s store) notFound(id string) error {
+	return fmt.Errorf(L("编组不存在：%s（状态目录 %s；如需其他目录，设置 HERDR_PLUGIN_STATE_DIR=<目录>）"), id, s.dir)
 }
 
 func (s store) teamsDir() string      { return filepath.Join(s.dir, "teams") }
@@ -432,7 +447,7 @@ func (s store) findByPane(pane string) []string {
 func (s store) load(id string) (*Team, error) {
 	b, err := os.ReadFile(s.file(id))
 	if err != nil {
-		return nil, fmt.Errorf(L("编组不存在：%s"), id)
+		return nil, s.notFound(id)
 	}
 	var head struct {
 		TeamID string `json:"team_id"`
