@@ -103,7 +103,7 @@ nakama update [--check] [--yes]
 编组初始化之后，可以增减或替换 Worker / Advisor，包括卡住的成员。Owner 不可替换。一个编组包含 1 个 Owner、1–4 个 Worker 与 0–4 个 Advisor（默认 1 个 Worker；Advisor 引擎不为 `none` 时默认 1 个 Advisor，否则没有）；人数上限针对同时在册的成员，不限制实例号。同类有多个成员时，`swap` 与 `drop` 须指定 `--instance N`。新 pane 一律在锚点所在的 tab 内 split；无法核验时停止操作，不新开 tab 或窗口。
 
 - **入口**：在锚点或任一角色 pane 按 `prefix+u`，已有编组时显示管理菜单（`a` 添加 Advisor、`n` 添加 Worker、`x` 移除 Advisor、`r` 移除 Worker（不可移除最后一个）、`v` 替换 Advisor、`w` 替换 Worker、`c` 清理任务目录；同类有多个成员时菜单输入成员键如 `W2`，命令行 `--instance` 则用数字如 `2`），选引擎并确认后执行。命令行等价为 `nakama add / drop / swap --team <id>`。
-- **重绑与解散**：同一个菜单里，`b`（重绑）只在锚点或某个成员看起来是重启后的候选、或有未完成的重绑计划时显示；`d`（解散）始终显示。见“电脑或 Herdr 重启后恢复编组”和“解散编组”。
+- **重绑与解散**：同一个菜单里，`b`（重绑）只在锚点或某个成员看起来是重绑候选（重启后，或运行期 session 变化后）、或有未完成的重绑计划时显示；`d`（解散）始终显示。见“电脑或 Herdr 重启后恢复编组”和“解散编组”。
 - **两步完成**：`add` / `swap` 只创建 pane 并启动新实例；核对新实例的模型与授权后按 `prefix+i`，`init` 初始化新角色，再向其余在册角色各投递一次 `[TEAM_UPDATE]`（最新映射加该角色的新分工规则）。`drop` 没有新实例，直接投递。
 - **只通知空闲角色**：`[TEAM_UPDATE]` 只投给身份核验通过且 idle/done 的角色；忙碌或被对话框阻塞的角色保留待通知标记（`status` 显示 `team_update=pending`），空闲后重按 `prefix+i`。
 - **旧实例**：被替换或移除的实例记入状态的 `retired`，其 pane 不关闭、不改名、不再收到插件输入。替换 Worker 前请确认旧 Worker 已停止写入，之后自行处理该 pane。
@@ -153,7 +153,7 @@ nakama update [--check] [--yes]
 
 ## 状态与安全
 
-- 状态：`$HERDR_PLUGIN_STATE_DIR/teams/<safe-id>.json`（缺省 `${XDG_STATE_HOME:-$HOME/.local/state}/nakama`）；目录 0700、文件 0600、同目录临时文件 + `os.Rename` 原子替换；只解析 JSON，绝不执行；缺必需字段/null 一律视为非法，不用 Go 零值冒充有效。
+- 状态：`$HERDR_PLUGIN_STATE_DIR/teams/<safe-id>.json`（缺省：若 `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/plugins/forsakesoul.nakama` 目录已存在则用它，否则 `${XDG_STATE_HOME:-$HOME/.local/state}/nakama`）；目录 0700、文件 0600、同目录临时文件 + `os.Rename` 原子替换；只解析 JSON，绝不执行；缺必需字段/null 一律视为非法，不用 Go 零值冒充有效。
 - 锁：`mkdir` 锁（不用 flock：进程退出自动释放会破坏「遗留锁不自动接管」）；锁序固定 anchor → team，首次建组在发布可发现状态前即持 team 锁并持有到事务结束，已有组的所有写操作用同一把 team 锁；**遗留锁不自动接管**，报错提示人工核对；锁内重读状态与 pending 再决策；只释放本进程取得的完整路径。
 - 实例身份：每个角色启动/核验成功后持久化 `terminal|pane|kind|session`；`init`/重入/`rename`/`prompt` 前用 `agent get` 复核，pane/身份字段缺失或漂移 → 拒绝；身份比较只有一个实现，完整比较 terminal/pane/kind/session（session 空与非空之间的变化同样算漂移）。手动启动器（`cc`/`ccenv`/`pi`）`rename` 前确认 pane 当前实例与启动观测一致，不 `rename` 后来占用者；`rename` 后再用同一基准（启动观测或已冻结 identity）核一次完整指纹，通过才冻结并允许 prompt（`rename` 本身无法撤回，漂移时已发生的 1 次 `rename` 会保留）。
 - 副作用顺序：每个 `split`/`pane run`/`rename`/`prompt` 前写 `pending`，返回后更新；`split` 成功即落盘 pane。重入先核验；`UNKNOWN` 停止不重发。仅“启动前 `agent_pane_busy`”可有界重试。
@@ -174,18 +174,18 @@ nakama update [--check] [--yes]
 
 **怎么做。**
 1. 先只读预检（零写入）：`nakama rebind --team <id> --preflight`。它逐角色、逐锚点输出 `terminal 旧 → 新`、session 与任务名的差异。
-2. 按输出补充确认参数后执行：`nakama rebind --team <id> --confirm-anchor <新锚点 terminal> [--confirm-session <成员键|anchor>=<session>]...`。成员键形如 O1、W1、W2、A1…（例如 `--confirm-session W2=<session>` 确认第二个 Worker 的 session）。
-   - `--confirm-session` 只用于记录 session 为空的角色（例如 codex、agy 首次 prompt 前冻结的），值必须等于本次观测到的非空 session。
+2. 按输出补充确认参数后执行：`nakama rebind --team <id> [--confirm-session <成员键|anchor>=<session>]...`；仅当预检列出时才加 `--confirm-anchor <新 terminal>`（无 identity 的 shell 锚点）。成员键形如 O1、W1、W2、A1…（例如 `--confirm-session W2=<session>` 确认第二个 Worker 的 session）。
+   - `--confirm-session` 只用于两种情况：记录 session 为空的补全（例如 codex、agy 首次 prompt 前冻结的，含重启后 terminal 与名称同时变化的情形）；或原 terminal 不变且任务名仍为原角色名时的 session 漂移（如压缩后换了 id，确认前须人工核对仍是同一会话的延续）。带 identity 的锚点替换已记录的非空 session 时，另需原 terminal 不变。值必须等于本次观测到的非空 session。
    - `--confirm-anchor` 只用于没有 identity 的 shell 锚点，值必须等于本次观测到的新 terminal。
-   - 记录 session 非空的角色不接受确认覆盖：观测必须与记录相等。
+   - 已记录的非空 session 被不同的非空值替换时，若 terminal 或任务名也变化，证据不足，即使给出确认值也拒绝：请用 `swap` / `up` 重建该成员。记录为空的补全不受此限。
    - `--retire <成员键>`（可重复）用于已无法找回的 Worker/Advisor（pane 已关闭，或会话已换）：同一次重绑中把它移入 `retired`（与 `drop` 相同，pane 保留、不关闭），不观测它，其余成员照常重绑。不能停用 Owner，停用后至少保留一个 Worker。提交后 `team_rev` 只加一，在册成员待收 `[TEAM_UPDATE]`，运行 `init` 投递。重启后锚点 terminal 已变，`drop` 会因锚点不一致而拒绝，所以停用并入 `rebind`。
 3. 无需重绑（身份与名称都已一致）时输出 `无需重绑` 且不写状态；重复执行是完整 no-op，不增加 `team_rev`，也不增加审计。
 
-**从管理菜单重绑。** 编组看起来是重启后的候选时，菜单显示 `b`。它输出同样的预检结果，列出需要显式确认的值，确认后正是用这些值执行 `rebind`；`rebind` 会重新观测，值不再一致就拒绝。
+**从管理菜单重绑。** 编组看起来是重绑候选（重启后，或运行期成员 session 变化后）时，菜单显示 `b`。它输出同样的预检结果，列出需要显式确认的值，确认后正是用这些值执行 `rebind`；`rebind` 会重新观测，值不再一致就拒绝。
 
-**拒绝条件（全部零 rename、零状态写入）。** 编组不是 `initialized`、存在 pending、任一角色 stale 或未初始化；pane 不可读；
-pane 的 workspace/tab/cwd 与记录不一致；kind 变化；观测 session 为空，或与记录不同；任务名既不是空也不是 Bridge 精确自动名（可能是他人占用）；
-目标任务名被其它 pane 占用；确认值与观测不一致或指向不需要确认的字段。拒绝时只输出候选差异，不把它写成新 identity；若失败的是 Worker/Advisor，另提示可加 `--retire <成员键>`（只提示，不自动停用）。
+**拒绝条件（全部零 rename、零状态写入）。** 编组既不是 `initialized` 也不是 `launched`（如 `changing`）、存在 pending、任一角色 stale 或未初始化；pane 不可读；
+pane 的 workspace/tab/cwd 与记录不一致；kind 变化；观测 session 为空，或已记录的非空 session 被不同的非空值替换且 terminal 或任务名也变化；任务名既不是空也不是 Bridge 精确自动名（可能是他人占用）；
+目标任务名被其它 pane 占用；确认值与观测不一致或指向不需要确认的字段。拒绝时只输出候选差异，不把它写成新 identity；若失败的是 Worker/Advisor，另提示可加 `--retire <成员键>`（只提示，不自动停用）。编组存在未完成的重绑计划时 `init` 也会拒绝：先重跑 `rebind` 对账，或用 `rebind --discard-pending` 放弃。
 
 **语义是接纳，不是证明。** 同 pane + 同 kind + 非空 session 只说明用户显式接纳“同一对话在新 terminal 恢复”，不证明同一进程或凭据。
 CLI 无法证明 Herdr server 命名空间；锚点证据是 `pane get` 的 workspace/tab/cwd 连续性与 pane id。
@@ -206,8 +206,8 @@ CLI 无法证明 Herdr server 命名空间；锚点证据是 `pane get` 的 work
 
 **状态兼容。** Nakama 可读旧 schema 1–4，下次保存时写为 `schema_version: 5`。schema 2 新增 `rebind_pending` 和 `rebinds`，schema 3 新增 `task_dir`、`retired` 和角色的 `team_update_pending`，schema 4 引入 `O1`、`W1` 等成员键。读取旧状态时，Nakama 会把当时隐含的 Claude 和 Sol 默认值展开为显式引擎配置，恢复启动时沿用原参数。旧二进制拒绝 schema 5。降级前先完成未结计划，并单独处理已升级的状态文件。
 
-**不会自动发生。** `init` 与 `up` 不执行重绑；`init` 在检测到“仅 terminal 或名称变化的候选”时只提示 `可能需要显式 rebind --team <id>`，
-不标 stale、不写状态。`status` 只读，按记录 pane 观测，输出 `binding=bound|candidate|unverified`，并区分生命周期 `status` 与绑定是否有效。`bound` 还要求当前任务名等于记录的角色名；名称为他人名或为空时至多 `unverified`。`candidate` 只是候选（同 pane 与 kind，terminal 或名称已变），不保证 `rebind` 能通过预检，需先 `--preflight` 核对。
+**不会自动发生。** `init` 与 `up` 不执行重绑；`init` 在检测到“仅 terminal、名称或 session 变化的候选”时只提示 `可能需要显式 rebind --team <id>`，
+不标 stale、不写状态。`status` 只读，按记录 pane 观测，输出 `binding=bound|candidate|unverified`，并区分生命周期 `status` 与绑定是否有效。`bound` 还要求当前任务名等于记录的角色名；名称为他人名或为空时至多 `unverified`。`candidate` 只是候选（同 pane 与 kind，terminal、名称或 session 已变；运行期 session 漂移也属于候选），不保证 `rebind` 能通过预检，需先 `--preflight` 核对。
 
 ## 协议来源
 

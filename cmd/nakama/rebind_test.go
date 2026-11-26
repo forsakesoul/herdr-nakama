@@ -203,7 +203,7 @@ func TestRebindRefusalsWriteNothing(t *testing.T) {
 		"目标任务名被其它 pane 占用": {true, restartOpt{}, func(e *tenv, _, _ string) {
 			e.rowSet(e.str("roles", "O1", "name"), "w0:p99", "term_x", "claude", "")
 		}, nil, "已被其它 pane 占用"},
-		"session 不一致": {true, restartOpt{sessions: map[string]string{"O1": "sess-other"}}, func(*tenv, string, string) {}, nil, "session 不一致"},
+		"session 漂移伴随 terminal 变化": {true, restartOpt{sessions: map[string]string{"O1": "sess-other"}}, func(*tenv, string, string) {}, nil, "证据不足"},
 		"kind 变化": {true, restartOpt{}, func(e *tenv, p, _ string) {
 			e.rowDel("@" + p)
 			e.rowSet("@"+p, p, "term_new_"+p, "claude", "sess-owner")
@@ -311,7 +311,7 @@ func TestRebindPreflightWritesNothing(t *testing.T) {
 
 func TestRebindRefusesUnstableStates(t *testing.T) {
 	cases := map[string]func(e *tenv){
-		"phase 非 initialized": func(e *tenv) { e.stateSet(func(m map[string]any) { m["phase"] = "launched" }) },
+		"phase 为 changing": func(e *tenv) { e.stateSet(func(m map[string]any) { m["phase"] = "changing" }) },
 		"已 stale": func(e *tenv) {
 			e.stateSet(func(m map[string]any) { dig(m, "roles", "O1").(map[string]any)["stale"] = true })
 		},
@@ -638,4 +638,72 @@ func TestRebindRetireRefusalsWriteNothing(t *testing.T) {
 			eq(t, e.count("agent", "rename"), renames, "拒绝时零 rename")
 		})
 	}
+}
+
+// launched（add/swap 后待投）与 initialized 同样是稳定组：成员均已 init 时可重绑，phase 保持不变。
+func TestRebindAcceptsLaunchedPhase(t *testing.T) {
+	e, id := rebindSetup(t, true, false)
+	restart(e, restartOpt{})
+	t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
+	e.stateSet(func(m map[string]any) { m["phase"] = "launched" })
+	e.mustRun("rebind", "--team", id, "--confirm-anchor", "term_new_anchor")
+	eq(t, e.str("phase"), "launched", "rebind 不改 phase")
+	eq(t, e.str("roles", "O1", "identity", "terminal_id"), "term_new_"+e.str("roles", "O1", "pane"), "launched 下 owner 已重绑")
+}
+
+// 非空 session 漂移若同时伴随 terminal 或任务名变化（重启式变化）证据不足：拒绝，即使给出确认值，也零写入。
+func TestRebindSessionDriftWithTerminalChangeRefused(t *testing.T) {
+	e, id := rebindSetup(t, true, false)
+	restart(e, restartOpt{sessions: map[string]string{"O1": "sess-other"}})
+	t.Setenv("FAKE_ANCHOR_TERM", "term_new_anchor")
+	before, renames := readState(t, e), e.count("agent", "rename")
+	for _, extra := range [][]string{nil, {"--confirm-session", "O1=sess-other"}} {
+		ok, out := e.run(append([]string{"rebind", "--team", id, "--confirm-anchor", "term_new_anchor"}, extra...)...)
+		if ok {
+			t.Fatalf("terminal/名称同时变化的 session 漂移应拒绝（extra=%v）：\n%s", extra, out)
+		}
+		has(t, out, "证据不足", "说明证据不足")
+		eq(t, string(readState(t, e)), string(before), "拒绝时状态字节不变")
+		eq(t, e.count("agent", "rename"), renames, "拒绝时零 rename")
+	}
+}
+
+// 原 terminal 不变且任务名仍为原角色名时，session 漂移可经显式确认更新身份；phase 与 TeamUpdate 保留。
+func TestRebindSessionDriftSameTerminalConfirmed(t *testing.T) {
+	e, id := rebindSetup(t, true, false)
+	name, pane := e.str("roles", "O1", "name"), e.str("roles", "O1", "pane")
+	term, kind := e.str("roles", "O1", "identity", "terminal_id"), e.str("roles", "O1", "identity", "kind")
+	e.rowDel(name)
+	e.rowDel("@" + pane)
+	e.rowSet(name, pane, term, kind, "sess-other")
+
+	ok, out := e.run("rebind", "--team", id)
+	if ok {
+		t.Fatalf("未确认的 session 漂移应拒绝：\n%s", out)
+	}
+	has(t, out, "--confirm-session O1=sess-other", "给出精确确认参数")
+	e.mustRun("rebind", "--team", id, "--confirm-session", "O1=sess-other")
+	eq(t, e.str("roles", "O1", "identity", "session"), "sess-other", "确认后身份更新为新 session")
+	eq(t, e.str("roles", "O1", "identity", "terminal_id"), term, "terminal 不变")
+	eq(t, e.str("phase"), "initialized", "rebind 不改 phase")
+	has(t, e.mustRun("status", "--team", id), "binding=bound", "提交后绑定有效")
+}
+
+// 未完成的重绑计划存在时 init 必须在任何写入或 prompt 之前拒绝：状态字节不变、零 prompt。
+func TestInitRefusesWhileRebindPending(t *testing.T) {
+	e, id := rebindSetup(t, true, false)
+	e.stateSet(func(m map[string]any) {
+		r := dig(m, "roles", "O1").(map[string]any)
+		ident := r["identity"]
+		step := map[string]any{"role": "O1", "pane": r["pane"], "name": r["name"], "rename": false, "old": ident, "new": ident}
+		m["rebind_pending"] = map[string]any{"op_id": "op_x", "at": "2026-01-01T00:00:00Z", "steps": []any{step}, "anchor_old_terminal": "a", "anchor_new_terminal": "b"}
+	})
+	before, prompts := readState(t, e), e.count("agent", "prompt")
+	ok, out := e.run("init", "--team", id)
+	if ok {
+		t.Fatalf("存在未完成重绑计划时 init 应拒绝：\n%s", out)
+	}
+	has(t, out, "rebind 计划", "说明未完成的重绑计划")
+	eq(t, string(readState(t, e)), string(before), "拒绝时状态字节不变")
+	eq(t, e.count("agent", "prompt"), prompts, "拒绝时零 prompt")
 }

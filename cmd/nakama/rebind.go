@@ -165,7 +165,7 @@ func (a *app) cmdRebind(args []string) error {
 		return a.fail("%v", err)
 	}
 	if !a.st.exists(o.team) {
-		return a.fail(L("编组不存在：%s"), o.team)
+		return a.fail("%v", a.st.notFound(o.team))
 	}
 	pre, err := a.st.load(o.team)
 	if err != nil {
@@ -247,11 +247,15 @@ func checkPlanConfirm(p *RebindPlan, o rebindOpts) string {
 	return ""
 }
 
-// 适用范围：只支持 initialized 的稳定组。旧 UNKNOWN、stale、半初始化一律拒绝，不清空、不补发 init/prompt。
+// 适用范围：initialized，或 launched（add/swap 后或 TEAM_UPDATE 待投）的稳定组。changing 与其他 phase 拒绝。
+// 旧 UNKNOWN、stale、半初始化一律拒绝，不清空、不补发 init/prompt；add/swap 新成员未 init 时由成员检查拒绝。
 // 本函数不看 rebind_pending：计划执行前与恢复时都用它重新确认组仍是稳定组。skip 为本次停用的成员，不参与稳定性要求。
 func rebindApplicable(t *Team, skip map[string]bool) string {
-	if t.Phase != "initialized" {
-		return fmt.Sprintf(L("编组 phase=%s：rebind 只支持 initialized 的稳定组。"), t.Phase)
+	if t.Phase == "changing" {
+		return fmt.Sprintf(L("编组 phase=%s：rebind 只支持 initialized 或 launched 的稳定组；先重跑 add/swap 或 up 补齐再 init。"), t.Phase)
+	}
+	if t.Phase != "initialized" && t.Phase != "launched" {
+		return fmt.Sprintf(L("编组 phase=%s：rebind 只支持 initialized 或 launched 的稳定组；先完成 init。"), t.Phase)
 	}
 	if t.Pending != nil {
 		return L("存在未确认的副作用（pending），不做重绑；请先 herdr agent get/read 人工核对。")
@@ -348,9 +352,10 @@ func (r rebindResult) plan(op string) *RebindPlan {
 	}
 }
 
-// checkRebindSession：记录 session 非空时必须与观测完全相等（确认值只能回显）；
-// 记录为空时必须有与本次观测相等的 --confirm-session，否则只提示候选与精确参数。
-func checkRebindSession(key, recorded, observed string, confirm map[string]string, res *rebindResult) {
+// checkRebindSession：记录 session 与观测相等时只检查确认参数是否为回显；记录为空或与观测不同时，
+// 都必须有与本次观测相等的 --confirm-session。非空漂移只在 stable（原 terminal 不变且任务名仍为原角色名）时可确认，
+// 否则证据不足直接拒绝：terminal 与会话同时变化无法区分是重启还是换人，须改用 swap/up。
+func checkRebindSession(key, recorded, observed string, stable bool, confirm map[string]string, res *rebindResult) {
 	c, given := confirm[key]
 	if given {
 		res.used[key] = true
@@ -358,14 +363,16 @@ func checkRebindSession(key, recorded, observed string, confirm map[string]strin
 	switch {
 	case observed == "":
 		res.problems = append(res.problems, fmt.Sprintf(L("%s：观测 session 为空或缺字段，拒绝。"), key))
-	case recorded != "":
-		// 记录非空时确认参数不能改变结论；与观测一致的确认只是回显（例如提交后的重跑），不同则拒绝。
+	case recorded != "" && observed == recorded:
+		// 与记录一致的确认只是回显（例如提交后的重跑）；与观测不同的确认则拒绝。
 		if given && c != observed {
 			res.problems = append(res.problems, fmt.Sprintf(L("%s：--confirm-session 与记录/观测的 session 不一致，拒绝。"), key))
 		}
-		if observed != recorded {
-			res.problems = append(res.problems, fmt.Sprintf(L("%s：session 不一致（记录与观测不同），拒绝。"), key))
-		}
+	case recorded != "" && !stable:
+		res.problems = append(res.problems, fmt.Sprintf(L("%s：session 漂移且 terminal 或任务名同时变化，证据不足，拒绝；请用 swap/up 重建该成员。"), key))
+	case !given && recorded != "":
+		res.needNotes = append(res.needNotes, fmt.Sprintf(L("%s 记录 session=%s，观测到 session=%s（请人工核对是同一会话的延续，如压缩后换 id）"), key, recorded, observed))
+		res.needArgs = append(res.needArgs, fmt.Sprintf("--confirm-session %s=%s", key, observed))
 	case !given:
 		res.needNotes = append(res.needNotes, fmt.Sprintf(L("%s 的记录 session 为空，观测到 session=%s"), key, observed))
 		res.needArgs = append(res.needArgs, fmt.Sprintf("--confirm-session %s=%s", key, observed))
@@ -408,7 +415,7 @@ func (a *app) observeRebindRole(t *Team, rn string, confirm map[string]string, r
 		res.problems = append(res.problems, fmt.Sprintf(L("角色 %s：kind 变化（记录 %s，观测 %s），拒绝。"), rn, old.Kind, nid.Kind))
 		return
 	}
-	checkRebindSession(rn, old.Session, nid.Session, confirm, res)
+	checkRebindSession(rn, old.Session, nid.Session, old.TerminalID == nid.TerminalID && obj.Name == r.Name, confirm, res)
 	cur := obj.Name
 	step := RebindStep{Role: rn, Pane: pane, Name: r.Name, Current: cur, Old: old, New: nid}
 	switch {
@@ -453,7 +460,7 @@ func (a *app) observeRebindAnchor(t *Team, o rebindOpts, res *rebindResult) {
 			res.problems = append(res.problems, L("锚点：kind 变化，拒绝。"))
 			return
 		}
-		checkRebindSession("anchor", an.Identity.Session, nid.Session, o.confirm, res)
+		checkRebindSession("anchor", an.Identity.Session, nid.Session, an.Identity.TerminalID == nid.TerminalID, o.confirm, res)
 		ident, old := nid, *an.Identity
 		res.anchorChanged = nid != old
 		res.anchorOld, res.anchorNew, res.anchorIdent, res.anchorIdentOld = old.TerminalID, nid.TerminalID, &ident, &old
@@ -598,8 +605,8 @@ func (a *app) resumeRebind(t *Team) error {
 }
 
 // validatePlanAgainstTeam：持久化计划与编组记录的跨字段一致性。不通过即视为损坏，不补默认值，不执行、不提交。
-// 规则：每个存在的角色恰好一步，无额外或重复角色；name/pane/old identity 与记录一致；session 只能是记录为空时的
-// 补全且须有对应确认；kind 与 pane 不变；锚点旧/新快照与记录一致；确认项必须对应真实的变化。
+// 规则：每个存在的角色恰好一步，无额外或重复角色；name/pane/old identity 与记录一致；session 的补全或漂移
+// 都须有对应确认；kind 与 pane 不变；锚点旧/新快照与记录一致；确认项必须对应真实的变化。
 func validatePlanAgainstTeam(t *Team, p *RebindPlan) error {
 	if p == nil {
 		return fmt.Errorf("%s", L("计划为空"))
@@ -646,7 +653,13 @@ func validatePlanAgainstTeam(t *Team, p *RebindPlan) error {
 			return fmt.Errorf(L("角色 %s 的新 session 为空"), s.Role)
 		}
 		if s.Old.Session != "" && s.New.Session != s.Old.Session {
-			return fmt.Errorf(L("角色 %s 的已记录 session 被改变"), s.Role)
+			if s.Old.TerminalID != s.New.TerminalID || s.Current != s.Name {
+				return fmt.Errorf(L("角色 %s 的 session 漂移伴随 terminal 或任务名变化，证据不足"), s.Role)
+			}
+			if !confirmed(s.Role + ":session") {
+				return fmt.Errorf(L("角色 %s 的已记录 session 被改变"), s.Role)
+			}
+			justified[s.Role+":session"] = true
 		}
 		if s.Old.Session == "" && s.New.Session != "" {
 			if !confirmed(s.Role + ":session") {
@@ -676,7 +689,13 @@ func validatePlanAgainstTeam(t *Team, p *RebindPlan) error {
 			return fmt.Errorf("%s", L("锚点新 session 为空"))
 		}
 		if an.Identity.Session != "" && nw.Session != an.Identity.Session {
-			return fmt.Errorf("%s", L("锚点已记录 session 被改变"))
+			if an.Identity.TerminalID != nw.TerminalID {
+				return fmt.Errorf("%s", L("锚点 session 漂移伴随 terminal 变化，证据不足"))
+			}
+			if !confirmed("anchor:session") {
+				return fmt.Errorf("%s", L("锚点已记录 session 被改变"))
+			}
+			justified["anchor:session"] = true
 		}
 		if an.Identity.Session == "" && nw.Session != "" {
 			if !confirmed("anchor:session") {
@@ -866,8 +885,11 @@ func (a *app) commitRebind(t *Team) error {
 		return err
 	}
 	a.outf(L("重绑完成：编组 %s team_rev=%d，审计 %s。运行 nakama status 核对。\n"), t.TeamID, t.TeamRev, plan.OpID)
-	if len(plan.Retire) > 0 {
-		a.outf(L("成员已变更：运行 nakama init --team %s 向在册成员投递 [TEAM_UPDATE]。\n"), t.TeamID)
+	for _, rn := range t.members() {
+		if t.role(rn).TeamUpdate {
+			a.outf(L("成员已变更：运行 nakama init --team %s 向在册成员投递 [TEAM_UPDATE]。\n"), t.TeamID)
+			break
+		}
 	}
 	return nil
 }
@@ -898,8 +920,9 @@ func (a *app) discardRebind(t *Team) error {
 
 // rebindRoleBinding 只读（status/init 共用）：
 // bound = 与记录 identity 完全一致且当前任务名等于记录角色名；
-// candidate = 同 pane 与 kind、记录 session 为空或相等，仅 terminal 变化（候选，不保证 rebind 可通过预检）；
-// unverified = 其余（包括 identity 一致但任务名不是本角色名）。
+// candidate = 同 pane 与 kind，且 terminal、任务名或 session 有变化；观测 session 非空，或记录 session 本就为空
+// （候选，不保证 rebind 可通过预检；session 漂移也归此类，init 据此提示而非标 stale）；
+// unverified = 其余（包括 identity 一致但任务名不是本角色名，以及观测 session 为空却记录非空）。
 func (a *app) rebindRoleBinding(r *Role) (string, agentObj) {
 	if r.Identity == nil {
 		return "unverified", agentObj{}
@@ -917,7 +940,7 @@ func (a *app) rebindRoleBinding(r *Role) (string, agentObj) {
 		return "bound", o
 	case id == old:
 		return "unverified", o
-	case id.Kind == old.Kind && (old.Session == "" || id.Session == old.Session):
+	case id.Kind == old.Kind && (id.Session != "" || old.Session == ""):
 		return "candidate", o
 	}
 	return "unverified", o

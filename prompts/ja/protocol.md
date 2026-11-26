@@ -347,7 +347,7 @@
 ### Owner による圧縮
 
 - タスク / server / Worker の名前→pane、エンジン、書き込みの停止と idle/done、入力欄が通常の編集状態であることを確認したら、圧縮前のイベントまたは出力の境界を記録します。
-- Codex、Claude Code（cc/ccenv）、Pi のネイティブ /compact は Owner が単独で一度だけ送信します。
+- Codex、Claude Code（cc/ccenv）、Pi、agy のネイティブ /compact は Owner が単独で一度だけ送信します。
 - 例：herdr agent prompt "<実際の Worker 名>" '/compact' --wait --timeout 120000。
 - working/blocked/unknown の Worker にはコマンドを送らず、Worker に通常の返信で圧縮を装わせません。
 - 送信の成功や idle は圧縮の完了を証明しないため、初回の経路は実行時に検証しなければなりません。

@@ -316,7 +316,7 @@ func (a *app) cmdResolve(args []string) error {
 		return a.fail(L("resolve 必须指定 --team <id>，并在 --delivered 与 --not-delivered 中选一个。"))
 	}
 	if !a.st.exists(id) {
-		return a.fail(L("编组不存在：%s"), id)
+		return a.fail("%v", a.st.notFound(id))
 	}
 	if err := a.lock("team-"+id, "resolve"); err != nil {
 		return err
@@ -383,7 +383,7 @@ func (a *app) cmdDown(args []string) error {
 		return a.fail(L("down 必须指定 --team <id>"))
 	}
 	if !a.st.exists(id) {
-		return a.fail(L("编组不存在：%s"), id)
+		return a.fail("%v", a.st.notFound(id))
 	}
 	// 锁序 anchor → team；状态读不出来就拿不到锚点，只取 team 锁。
 	t, _ := a.st.load(id)
@@ -592,7 +592,7 @@ func (a *app) cmdClean(args []string) error {
 	ids := a.st.list()
 	if id := first(v["--team"]); id != "" {
 		if !a.st.exists(id) {
-			return a.fail(L("编组不存在：%s"), id)
+			return a.fail("%v", a.st.notFound(id))
 		}
 		ids = []string{id}
 	} else if len(v["--task"]) > 0 {

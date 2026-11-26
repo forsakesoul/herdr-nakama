@@ -784,7 +784,7 @@ func TestSessionBackfillOnReinit(t *testing.T) { // 真实 Herdr：codex 的 ses
 	owner := func(e *tenv, term, kind, sess string) {
 		e.rowSet(e.str("roles", "O1", "name"), e.str("roles", "O1", "pane"), term, kind, sess)
 	}
-	t.Run("空补全为非空，之后变化即漂移", func(t *testing.T) {
+	t.Run("空补全为非空，之后变化为 rebind 候选：拒绝、不标 stale", func(t *testing.T) {
 		e := setup(t)
 		prompts := e.count("agent", "prompt")
 		owner(e, e.str("roles", "O1", "identity", "terminal_id"), "codex", "sess-1")
@@ -793,7 +793,8 @@ func TestSessionBackfillOnReinit(t *testing.T) { // 真实 Herdr：codex 的 ses
 		eq(t, e.str("roles", "O1", "stale"), "<nil>", "不标 stale")
 		eq(t, e.count("agent", "prompt"), prompts, "无重发")
 		owner(e, e.str("roles", "O1", "identity", "terminal_id"), "codex", "sess-2")
-		has(t, e.mustFail("init", "--team", e.teamID()), "stale", "补全后变化即漂移")
+		has(t, e.mustFail("init", "--team", e.teamID()), "rebind", "补全后变化是 rebind 候选")
+		eq(t, e.str("roles", "O1", "stale"), "<nil>", "session 漂移不标 stale")
 	})
 	// terminal 变化且 pane/kind 相同：是 rebind 候选（重启后的常见情形）。init 只提示并拒绝，不标 stale，
 	// 否则 stale 永不自动清除，会永久阻断 rebind。
