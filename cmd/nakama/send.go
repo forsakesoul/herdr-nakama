@@ -185,9 +185,10 @@ func (a *app) verifiedSender(t *Team, cliFrom string) (string, error) {
 
 func (a *app) messageIdentityError(t *Team, key, party string, expected Ident, obj agentObj, reason string) string {
 	r, observed := t.role(key), obj.ident()
-	if observed.complete() && observed.PaneID == string(r.Pane) && obj.Name == r.Name &&
+	if observed.complete() && obj.Name == r.Name &&
 		expected.Session != "" && observed.Session != "" && observed.Session != expected.Session {
-		observed.Session = expected.Session
+		expected.PaneID = string(r.Pane)
+		expected.Session = observed.Session
 		if sameIdent(expected, observed) {
 			return fmt.Sprintf(L("%s %s 会话绑定失配（binding=candidate，pane 与 terminal 未变）。请先运行 %s rebind --team %s --preflight，核对是否为同一会话的延续，再按预检输出显式确认。"), party, key, a.cliPrefix(), t.TeamID)
 		}

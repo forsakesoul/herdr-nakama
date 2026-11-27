@@ -675,7 +675,6 @@ func TestRebindSessionDriftSameTerminalConfirmed(t *testing.T) {
 	term, kind := e.str("roles", "O1", "identity", "terminal_id"), e.str("roles", "O1", "identity", "kind")
 	e.rowDel(name)
 	e.rowDel("@" + pane)
-	e.rowSet(name, pane, term, kind, "sess-other")
 
 	body := filepath.Join(e.root, "draft.md")
 	if err := os.WriteFile(body, []byte("检查会话漂移\n"), 0o600); err != nil {
@@ -687,7 +686,13 @@ func TestRebindSessionDriftSameTerminalConfirmed(t *testing.T) {
 	before, prompts := readState(t, e), e.count("agent", "prompt")
 	preflight := "rebind --team " + id + " --preflight"
 	t.Setenv("HERDR_PANE_ID", pane)
+	e.rowSet(name, "w0:p99", term, kind, "sess-other")
 	out := e.mustFail(send("W1")...)
+	has(t, out, "发件人身份核验失败", "pane 变化时保留原核验错误")
+	hasNot(t, out, "--preflight", "pane 变化不能按纯会话漂移恢复")
+
+	e.rowSet(name, pane, term, kind, "sess-other")
+	out = e.mustFail(send("W1")...)
 	has(t, out, "发件人 O1 会话绑定失配", "发件人会话漂移应明确指出本端")
 	has(t, out, preflight, "发件人错误给出只读预检入口")
 	hasNot(t, out, "delivery=", "发件人未通过核验时未分配请求")
