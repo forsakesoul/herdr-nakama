@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      go_test:
+        description: "只跑定向 go test，填 go test 之后的参数，例如 -race -run TestSend ./cmd/nakama；留空跑完整检查"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -31,15 +36,24 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ matrix.go }}
+      # 手动触发且填了 go_test 时只在 stable 上跑定向测试，其余步骤跳过；参数经环境变量传入。
+      - name: targeted go test
+        if: inputs.go_test != '' && matrix.go == 'stable'
+        env:
+          GO_TEST_ARGS: ${{ inputs.go_test }}
+        run: go test $GO_TEST_ARGS
       - name: gofmt
-        if: matrix.go == 'stable'
+        if: inputs.go_test == '' && matrix.go == 'stable'
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: go vet
+        if: inputs.go_test == ''
         run: go vet ./...
       - name: go test
+        if: inputs.go_test == ''
         run: go test -count=1 ./...
       - name: build
+        if: inputs.go_test == ''
         run: go build -trimpath -o bin/nakama ./cmd/nakama
       - name: docs/index.html is generated from tools/build_pages.py
-        if: matrix.go == 'stable'
+        if: inputs.go_test == '' && matrix.go == 'stable'
         run: python3 tools/build_pages.py --check
