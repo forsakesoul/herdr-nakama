@@ -677,6 +677,35 @@ func TestRebindSessionDriftSameTerminalConfirmed(t *testing.T) {
 	e.rowDel("@" + pane)
 	e.rowSet(name, pane, term, kind, "sess-other")
 
+	body := filepath.Join(e.root, "draft.md")
+	if err := os.WriteFile(body, []byte("检查会话漂移\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	send := func(to string) []string {
+		return []string{"send", "--team", id, "--task", "op_drift", "--to", to, "--title", "检查", "--file", body}
+	}
+	before, prompts := readState(t, e), e.count("agent", "prompt")
+	preflight := "rebind --team " + id + " --preflight"
+	t.Setenv("HERDR_PANE_ID", pane)
+	out := e.mustFail(send("W1")...)
+	has(t, out, "发件人 O1 会话绑定失配", "发件人会话漂移应明确指出本端")
+	has(t, out, preflight, "发件人错误给出只读预检入口")
+	hasNot(t, out, "delivery=", "发件人未通过核验时未分配请求")
+	if _, err := os.Stat(filepath.Join(e.str("task_dir"), "op_drift")); !os.IsNotExist(err) {
+		t.Fatalf("发件人核验失败应在创建任务目录之前返回：%v", err)
+	}
+	has(t, e.mustFail("rules", "--team", id), preflight, "重读规则时同样给出恢复入口")
+
+	t.Setenv("HERDR_PANE_ID", e.str("roles", "W1", "pane"))
+	out = e.mustFail(send("O1")...)
+	has(t, out, "收件人 O1 会话绑定失配", "同一角色作为收件人时应明确指出对端")
+	has(t, out, "req=op_drift/W1-000 delivery=NOT_SENT", "收件人核验失败时保留请求")
+	eq(t, e.count("agent", "prompt"), prompts, "身份核验失败均未投递")
+
+	out = e.mustFail("rebind", "--team", id, "--preflight")
+	has(t, out, "--confirm-session O1=sess-other", "预检给出精确确认参数")
+	eq(t, string(readState(t, e)), string(before), "投递失败与预检都不写编组状态")
+
 	ok, out := e.run("rebind", "--team", id)
 	if ok {
 		t.Fatalf("未确认的 session 漂移应拒绝：\n%s", out)
@@ -687,6 +716,9 @@ func TestRebindSessionDriftSameTerminalConfirmed(t *testing.T) {
 	eq(t, e.str("roles", "O1", "identity", "terminal_id"), term, "terminal 不变")
 	eq(t, e.str("phase"), "initialized", "rebind 不改 phase")
 	has(t, e.mustRun("status", "--team", id), "binding=bound", "提交后绑定有效")
+	has(t, e.mustRun("send", "--team", id, "--resend", "op_drift/W1-000"), "delivery=SENT to=O1", "确认后可按原请求补投")
+	t.Setenv("HERDR_PANE_ID", pane)
+	has(t, e.mustRun(send("W1")...), "delivery=SENT to=W1", "确认后 Owner 可重新发件")
 }
 
 // 未完成的重绑计划存在时 init 必须在任何写入或 prompt 之前拒绝：状态字节不变、零 prompt。

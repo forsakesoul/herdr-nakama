@@ -131,7 +131,9 @@ func TestSendGuards(t *testing.T) {
 	e.rowSet(id+"_execute", e.str("roles", "W1", "pane"), "term_other", "pi", "")
 	out := e.mustFail(with("--from", "O1", "--to", "W1")...)
 	has(t, out, "delivery=NOT_SENT", "身份漂移不投递")
+	has(t, out, "收件人身份核验失败", "标识对端核验失败")
 	has(t, out, "实例身份漂移", "给出原因")
+	hasNot(t, out, "--preflight", "terminal 改变时不提示按纯会话漂移恢复")
 }
 
 func TestProtocolIsScopedByRole(t *testing.T) {
@@ -392,7 +394,9 @@ func TestSendVerifiesSenderAndRoster(t *testing.T) {
 
 	// 发件人的 pane 换了实例。
 	e.rowSet(id+"_design", e.str("roles", "O1", "pane"), "term_other", "codex", "")
-	has(t, e.mustFail(append(args, "--from", "O1")...), "实例身份漂移", "发件人身份漂移时拒绝")
+	out := e.mustFail(append(args, "--from", "O1")...)
+	has(t, out, "发件人身份核验失败", "标识本端核验失败")
+	has(t, out, "实例身份漂移", "发件人身份漂移时拒绝")
 	eq(t, e.count("agent", "prompt"), n, "均未投递")
 	if _, err := os.Stat(filepath.Join(realPath(e.proj), ".nakama", id, "op")); err == nil {
 		t.Fatal("未通过发件人核验不应写入任务目录")

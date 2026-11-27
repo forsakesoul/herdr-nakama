@@ -177,10 +177,22 @@ func (a *app) verifiedSender(t *Team, cliFrom string) (string, error) {
 	}
 	if obj, msg := a.verifyIdentity(t, from, sr.Identity, false); msg != "" {
 		if _, ok := fillSession(*sr.Identity, obj.ident()); !ok {
-			return "", a.fail("%s", msg)
+			return "", a.fail("%s", a.messageIdentityError(t, from, L("发件人"), *sr.Identity, obj, msg))
 		}
 	}
 	return from, nil
+}
+
+func (a *app) messageIdentityError(t *Team, key, party string, expected Ident, obj agentObj, reason string) string {
+	r, observed := t.role(key), obj.ident()
+	if observed.complete() && observed.PaneID == string(r.Pane) && obj.Name == r.Name &&
+		expected.Session != "" && observed.Session != "" && observed.Session != expected.Session {
+		observed.Session = expected.Session
+		if sameIdent(expected, observed) {
+			return fmt.Sprintf(L("%s %s 会话绑定失配（binding=candidate，pane 与 terminal 未变）。请先运行 %s rebind --team %s --preflight，核对是否为同一会话的延续，再按预检输出显式确认。"), party, key, a.cliPrefix(), t.TeamID)
+		}
+	}
+	return fmt.Sprintf(L("%s身份核验失败：%s"), party, reason)
 }
 
 // 分配请求号并落盘：序号取本实例已有文件的最大值加一，硬链接已存在就换下一个号重试。
@@ -225,7 +237,7 @@ func (a *app) allocMessage(sub string, m *message, task string, body []byte) err
 func (a *app) deliver(t *Team, sub string, m *message, sync bool) (string, string) {
 	r := t.role(m.To)
 	if !r.Inited || r.Stale || r.Identity == nil {
-		return "NOT_SENT", fmt.Sprintf(L("%s 未完成初始化或身份待核对"), m.To)
+		return "NOT_SENT", fmt.Sprintf(L("收件人 %s 未完成初始化或身份待核对"), m.To)
 	}
 	// 本次发送的身份基准：空 session 首次补全后固定下来，之后的观测都与它比较。
 	base := *r.Identity
@@ -234,6 +246,8 @@ func (a *app) deliver(t *Team, sub string, m *message, sync bool) (string, strin
 		if msg != "" {
 			if filled, ok := fillSession(base, obj.ident()); ok {
 				base, msg = filled, ""
+			} else {
+				msg = a.messageIdentityError(t, m.To, L("收件人"), base, obj, msg)
 			}
 		}
 		return obj.AgentStatus, msg
